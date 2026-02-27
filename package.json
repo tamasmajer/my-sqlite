@@ -1,0 +1,9 @@
+{
+  "name": "my-sqlite",
+  "private": true,
+  "flat": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ]
+}
