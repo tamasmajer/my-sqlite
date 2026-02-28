@@ -1,4 +1,9 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
+
+export function joinPath(...parts) {
+  return join(...parts)
+}
 
 export function ensureDir(path) {
   if (!existsSync(path)) mkdirSync(path, { recursive: true })

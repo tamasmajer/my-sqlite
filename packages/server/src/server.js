@@ -2,7 +2,7 @@ import * as Http from './access/http.js'
 import * as Sql from './access/sqlite.js'
 import * as Fs from './access/fs.js'
 import { route } from './router.js'
-import { join } from 'node:path'
+
 
 const args = process.argv.slice(2)
 
@@ -19,17 +19,17 @@ const config = {
   tls: args.includes('--tls'),
   cert: flag('cert', undefined),
   key: flag('key', undefined),
-  token: flag('token', null),
+  token: flag('token', process.env.MY_SQLITE_TOKEN || null),
 }
 
 Fs.ensureDir(config.datadir)
 
-const pidFile = join(config.datadir, '.pid')
+const pidFile = Fs.joinPath(config.datadir, '.pid')
 
 if (Fs.exists(pidFile)) {
   const pid = Number(Fs.readFile(pidFile).trim())
   let alive = false
-  try { process.kill(pid, 0); alive = true } catch {}
+  try { process.kill(pid, 0); alive = true } catch { }
   if (alive) {
     console.error(`Server already running (pid ${pid})`)
     process.exit(1)

@@ -1,78 +1,99 @@
 # my-sqlite
 
-Lightweight REST API over SQLite with database/collection semantics. Real SQL columns (not JSON blobs). Shape determines intent: array = data, object = config.
+A lightweight REST API over SQLite. It provides NoSQL-like collections but stores data under the hood in real SQL columns. 
 
-## Quick start
+## 🚀 Quick Start
+
+Start the server:
 
 ```bash
 npm install
-node packages/server/src/server.js --port 3000
+cp .env.example .env
+
+# Edit .env to set MY_SQLITE_TOKEN, then start the server:
+node --env-file=.env packages/server/src/server.js --port 3000
 ```
 
-## API
+> **Tip:** You can browse your databases and collections via the Admin UI at `http://localhost:3000/admin`. *(Requires a session cookie if started with `--token`)*
 
-### POST /api/:db — write data or configure collections
+---
 
-```js
-// array = data (batch, one transaction)
-{ "users": [{ "name": "Alice", "age": 30 }] }           // insert (no id)
-{ "users": [{ "id": 5, "age": 31 }] }                   // merge update
-{ "users": [{ "id": 5 }] }                               // delete
+## 💻 Client Library
 
-// object = config
-{ "users": { "index": ["name", "age"] } }                // set indexes
-{ "users": null }                                         // drop collection
-```
-
-Data rules (in one SQLite transaction):
-- No `id` → INSERT
-- `id` + fields → UPDATE SET only provided fields
-- `id` only → DELETE
-
-### GET /api/:db/:collection — query
-
-```
-GET /api/mydb/users?{"age":{"$gte":30},"$sort":"-age","$limit":5}
-```
-
-Operators: `$gt`, `$lt`, `$gte`, `$lte`, `$ne`, `$in`, `$nin`, `$like`
-Modifiers: `$limit`, `$skip`, `$sort` (prefix `-` for DESC)
-
-### GET /api/:db — list collections
-
-Returns `{ "users": { "columns": [...], "index": [...] } }`
-
-## Admin UI
-
-Browse databases and collections at `/admin`. Requires session cookie when `--token` is set.
-
-## Client library
+The easiest way to interact with your database is using the client library.
 
 ```js
 import * as Db from 'my-sqlite-client'
 
-const db = Db.connect('http://localhost:3000/mydb?token=secret')
+// The URL specifies the host and database name (we omit the token since we set it in .env)
+// (Automatically uses http:// for localhost and https:// for remote domains)
+const mydb = 'localhost:3000/api/mydb'
 
-const { users } = await Db.get(db, { users: { age: { $gte: 30 } } })
-await Db.post(db, { users: [{ name: 'Alice', age: 30 }] })
-await Db.list(db)
+// 1. Insert data (Analogous to POST /api/:db)
+await Db.post(mydb, { 
+  users: [{ name: 'Alice', age: 30 }] 
+})
+
+// 2. Query data (Analogous to GET /api/:db/:collection)
+const { users } = await Db.get(mydb, { 
+  users: { age: { $gte: 30 } } 
+})
+
+// 3. List all collections (Analogous to GET /api/:db)
+await Db.get(mydb)
 ```
 
-## CLI flags
+---
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--port` | 3000 | Listen port |
-| `--host` | localhost | Bind address |
-| `--datadir` | ./data | SQLite file directory |
-| `--token` | (none) | Enable auth |
-| `--tls` | off | Enable TLS |
-| `--cert` | - | TLS certificate path |
-| `--key` | - | TLS key path |
+## 🔌 REST API Basics
 
-## Server management
+If you prefer raw HTTP requests, the API is intuitive and JSON-based.
 
+### Writing Data (POST `/api/:db`)
+
+Send an array of records to insert, update, or delete. Everything in one request runs in a single SQLite transaction!
+
+```json
+{
+  "users": [
+    { "name": "Bob", "age": 25 },       // Insert (no id)
+    { "id": 5, "age": 31 },             // Update (has id + fields)
+    { "id": 6 }                         // Delete (only has id)
+  ]
+}
+```
+
+*Need to configure a collection (e.g., adding an index)? Send an object instead of an array: `{ "users": { "index": ["age"] } }` (or `{ "users": null }` to drop it).*
+
+### Querying Data (GET `/api/:db/:collection`)
+
+Pass a JSON query in the URL to filter, sort, and paginate:
+
+```http
+GET /api/mydb/users?{"age":{"$gte":30},"$sort":"-age","$limit":5}
+```
+
+- **Filter Operators:** `$gt`, `$lt`, `$gte`, `$lte`, `$ne`, `$in`, `$nin`, `$like`
+- **Modifiers:** `$limit`, `$skip`, `$sort` (use `-` prefix for descending)
+
+---
+
+## ⚙️ Server Management
+
+Configure your server using CLI flags:
+
+| Flag        | Default    | Description                 |
+| ----------- | ---------- | --------------------------- |
+| `--port`    | `3000`     | Port to listen on           |
+| `--host`    | `localhost`| Bind address                |
+| `--datadir` | `./data`   | SQLite files directory      |
+| `--token`   | `$MY_SQLITE_TOKEN` | Require a token for API access |
+| `--tls`     | `off`      | Enable TLS                  |
+| `--cert`    | *(none)*   | TLS certificate path        |
+| `--key`     | *(none)*   | TLS key path                |
+
+To gracefully stop the server:
 ```bash
-node packages/server/src/server.js --port 3000    # start (writes data/.pid)
-node packages/server/src/stop.js                   # stop
+node --env-file=.env packages/server/src/server.js --port 3000   # start (writes data/.pid)
+node packages/server/src/stop.js                                 # gracefully stop
 ```

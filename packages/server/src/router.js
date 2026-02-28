@@ -2,14 +2,13 @@ import * as Schema from './schema.js'
 import * as Data from './data.js'
 import * as Query from './query.js'
 import * as Auth from './auth.js'
-import * as Html from './html.js'
 import * as Fs from './access/fs.js'
 
 export function route(req, res, config) {
   const url = new URL(req.url, `http://${req.headers.host}`)
   const path = url.pathname
 
-  if (path.startsWith('/api/')) {
+  if (path === '/api' || path.startsWith('/api/')) {
     if (!Auth.checkApiAuth(req, config.token)) {
       json(res, 401, { ok: 0, error: 'Unauthorized' })
       return
@@ -34,7 +33,11 @@ function handleApi(req, res, config, url) {
   const dbName = parts[0]
   const collection = parts[1]
 
-  if (!dbName) { json(res, 400, { ok: 0, error: 'Missing database name' }); return }
+  if (!dbName) {
+    if (req.method === 'GET') json(res, 200, Fs.listFiles(config.datadir, '.sqlite'))
+    else json(res, 400, { ok: 0, error: 'Missing database name' })
+    return
+  }
 
   if (req.method === 'GET') {
     try {
@@ -94,90 +97,28 @@ function handlePost(res, config, dbName, body) {
 // --- Admin ---
 
 function handleAdmin(req, res, config, url) {
-  const path = url.pathname
+  let relPath = url.pathname.replace(/^\/admin/, '') || '/'
+  const uiDir = Fs.joinPath(process.cwd(), 'packages', 'ui')
 
-  // POST /admin/login
-  if (req.method === 'POST' && path === '/admin/login') {
-    readBody(req, body => {
-      if (!config.token || body.token === config.token) {
-        const sid = Auth.createSession()
-        res.writeHead(302, {
-          location: '/admin',
-          'set-cookie': `session=${sid}; Path=/; HttpOnly; SameSite=Strict`,
-        })
-        res.end()
-      } else {
-        html(res, 401, loginPage('Invalid token'))
-      }
-    })
-    return
+  if (relPath === '/') relPath = '/index.html'
+
+  let filePath = Fs.joinPath(uiDir, relPath)
+  let ext = filePath.split('.').pop()
+
+  if (!Fs.exists(filePath)) {
+    filePath = Fs.joinPath(uiDir, 'index.html')
+    ext = 'html'
   }
-
-  // login page (no auth needed)
-  if (path === '/admin/login') {
-    html(res, 200, loginPage())
-    return
-  }
-
-  // all other admin pages require auth
-  if (!Auth.checkAdminAuth(req, config.token)) {
-    res.writeHead(302, { location: '/admin/login' })
-    res.end()
-    return
-  }
-
-  // admin routes
-  const parts = path.replace('/admin', '').split('/').filter(Boolean)
-  const dbName = parts[0]
-  const collName = parts[1]
 
   try {
-    if (!dbName) {
-      // GET /admin — list databases
-      const dbs = Fs.listFiles(config.datadir, '.sqlite')
-      html(res, 200, Html.dbListPage(dbs))
-    } else if (!collName) {
-      // GET /admin/:db — list collections
-      const db = Schema.openDb(config.datadir, dbName)
-      html(res, 200, Html.collectionListPage(dbName, Schema.listCollections(db)))
-    } else {
-      // GET /admin/:db/:coll — data table
-      const db = Schema.openDb(config.datadir, dbName)
-      const filterStr = url.searchParams.get('q') || ''
-      const skip = Number(url.searchParams.get('skip')) || 0
-      const pageLimit = 50
-
-      // get total count
-      const countRow = Query.execQuery(db, collName, '')
-      const total = countRow.length
-
-      // build filter with pagination
-      const filter = filterStr ? JSON.parse(filterStr) : {}
-      filter.$limit = pageLimit
-      filter.$skip = skip
-      const queryStr = JSON.stringify(filter)
-
-      const rows = Query.execQuery(db, collName, encodeURIComponent(queryStr))
-      const info = Schema.getCollectionInfo(db, collName)
-      html(res, 200, Html.dataPage(dbName, collName, rows, info.columns, filterStr, skip, pageLimit, total))
-    }
-  } catch (err) {
-    html(res, 500, `<h1>Error</h1><p>${err.message}</p>`)
+    const data = Fs.readFile(filePath)
+    const mime = ext === 'js' ? 'text/javascript' : ext === 'css' ? 'text/css' : 'text/html'
+    res.writeHead(200, { 'Content-Type': mime })
+    res.end(data)
+  } catch (e) {
+    res.writeHead(404)
+    res.end('not found')
   }
-}
-
-function loginPage(error) {
-  return `<!DOCTYPE html>
-<html><head><title>my-sqlite admin</title>
-<style>body{font-family:system-ui;max-width:400px;margin:80px auto;padding:0 20px}
-input,button{display:block;width:100%;padding:8px;margin:8px 0;box-sizing:border-box}
-.err{color:red}</style></head>
-<body><h1>my-sqlite</h1>
-${error ? `<p class="err">${error}</p>` : ''}
-<form method="POST" action="/admin/login">
-<label>Token<input type="password" name="token" autofocus></label>
-<button type="submit">Login</button>
-</form></body></html>`
 }
 
 // --- Helpers ---
@@ -199,9 +140,4 @@ function readBody(req, cb) {
 function json(res, status, data) {
   res.writeHead(status, { 'content-type': 'application/json' })
   res.end(JSON.stringify(data))
-}
-
-function html(res, status, body) {
-  res.writeHead(status, { 'content-type': 'text/html' })
-  res.end(body)
 }
