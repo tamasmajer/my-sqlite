@@ -9,20 +9,25 @@ export function renderServerBar(currentServer, servers) {
   const items = [
     `<a href="#" class="server-item ${!currentServer ? 'active' : ''}" data-server="">Local</a>`,
     ...servers.map(s =>
-      `<a href="#" class="server-item ${s.url === currentServer ? 'active' : ''}" data-server="${esc(s.url)}">${esc(s.url)}</a>` +
-      `<button class="btn-del server-remove" data-server="${esc(s.url)}">✕</button>`
+      `<span class="server-entry"><a href="#" class="server-item ${s.url === currentServer ? 'active' : ''}" data-server="${esc(s.url)}">${esc(s.url)}</a>` +
+      `<button class="btn-del server-remove" data-server="${esc(s.url)}">✕</button></span>`
     )
   ].join('')
 
   return `
     <div class="server-bar">
-      <span class="server-label">Server: <strong>${esc(label)}</strong></span>
-      <div class="server-list">${items}</div>
-      <form id="add-server-form" class="inline-form">
-        <input name="url" placeholder="https://host:port" style="max-width:220px">
-        <input name="token" type="password" placeholder="token" style="max-width:140px">
-        <button type="submit">Add</button>
-      </form>
+      <div class="server-bar-top">
+        <span class="server-label">${esc(label)}</span>
+        <a href="#" id="server-toggle" class="muted">switch</a>
+      </div>
+      <div class="server-panel" style="display:none">
+        <div class="server-list">${items}</div>
+        <form id="add-server-form" class="inline-form">
+          <input name="url" placeholder="https://host:port" style="max-width:220px">
+          <input name="token" type="password" placeholder="token" style="max-width:140px">
+          <button type="submit">Add</button>
+        </form>
+      </div>
     </div>
   `
 }
@@ -89,6 +94,12 @@ export function renderCollections(dbName, collections) {
       <div class="header"><h1>${dbName}</h1></div>
       <p class="empty">No collections. Insert data via PUT to create one.</p>
       ${renderPutForm(dbName)}
+      <div class="panel danger-panel">
+        <h3>Danger Zone</h3>
+        <div class="danger-actions">
+          <button class="btn-danger" id="drop-db-btn" data-db="${dbName}">Drop Database</button>
+        </div>
+      </div>
     `
   }
 
@@ -118,6 +129,12 @@ export function renderCollections(dbName, collections) {
     </div>
     ${table}
     ${renderPutForm(dbName)}
+    <div class="panel danger-panel">
+      <h3>Danger Zone</h3>
+      <div class="danger-actions">
+        <button class="btn-danger" id="drop-db-btn" data-db="${dbName}">Drop Database</button>
+      </div>
+    </div>
   `
 }
 

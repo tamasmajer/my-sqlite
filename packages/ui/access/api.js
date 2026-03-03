@@ -116,6 +116,10 @@ export async function deleteDocs(dbName, collection, filterStr) {
   return request(`/api/${dbName}/${collection}${qs}`, { method: 'DELETE' })
 }
 
+export async function dropDatabase(dbName) {
+  return request(`/api/${dbName}`, { method: 'DELETE' })
+}
+
 export async function setMeta(dbName, collection, meta) {
   return request(`/api/${dbName}/${collection}`, {
     method: 'OPTIONS',

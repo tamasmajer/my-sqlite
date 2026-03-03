@@ -49,11 +49,14 @@ function handleApi(req, res, config, url) {
       return
     }
 
-    // /api/:db — list collections
+    // /api/:db — list or drop database
     if (!collection) {
       if (method === 'GET') {
         const db = Schema.openDb(config.datadir, dbName)
         json(res, 200, Schema.listCollections(db))
+      } else if (method === 'DELETE') {
+        Schema.dropDb(config.datadir, dbName)
+        json(res, 200, { ok: 1, dropped: true })
       } else {
         json(res, 405, { ok: 0, error: 'Method not allowed' })
       }
@@ -70,6 +73,7 @@ function handleApi(req, res, config, url) {
 function handleCollection(req, res, config, dbName, collection, method, filterStr) {
   if (method === 'GET') {
     const db = Schema.openDb(config.datadir, dbName)
+    if (!Schema.tableExists(db, collection)) { json(res, 200, []); return }
     const rows = Data.query(db, collection, filterStr)
     const jsonCols = Schema.jsonColumns(db, collection)
     json(res, 200, Data.fromSqlRows(rows, jsonCols))
@@ -160,7 +164,7 @@ function handleAdmin(req, res, config, url) {
   try {
     const data = Fs.readFile(filePath)
     const mime = ext === 'js' ? 'text/javascript' : ext === 'css' ? 'text/css' : 'text/html'
-    res.writeHead(200, { 'Content-Type': mime })
+    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' })
     res.end(data)
   } catch (e) {
     res.writeHead(404)

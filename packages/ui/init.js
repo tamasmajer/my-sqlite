@@ -39,10 +39,12 @@ async function render() {
 
 // Global click delegation for SPA links
 Browser.onClick(e => {
-  const a = Browser.closest(e.target, 'a')
-  if (a && a.href && a.href.startsWith(Browser.getOrigin() + '/admin')) {
+  // Toggle server panel
+  if (e.target.id === 'server-toggle') {
     e.preventDefault()
-    Router.navigate(a.href)
+    const panel = document.querySelector('.server-panel')
+    if (panel) panel.style.display = panel.style.display === 'none' ? '' : 'none'
+    return
   }
 
   // Switch server
@@ -56,7 +58,7 @@ Browser.onClick(e => {
       const server = Api.getServers().find(s => s.url === url)
       if (server && server.token) Api.setToken(server.token)
     }
-    render()
+    Router.navigate('/admin')
     return
   }
 
@@ -65,6 +67,14 @@ Browser.onClick(e => {
     const url = Browser.getAttr(e.target, 'data-server')
     Api.removeServer(url)
     render()
+    return
+  }
+
+  // SPA links
+  const a = Browser.closest(e.target, 'a')
+  if (a && a.href && a.href.startsWith(Browser.getOrigin() + '/admin')) {
+    e.preventDefault()
+    Router.navigate(a.href)
     return
   }
 
@@ -95,6 +105,14 @@ Browser.onClick(e => {
       Api.deleteDocs(db, coll, '').then(() => Router.navigate(`/admin/${db}`)).catch(err => alert(err.message))
     }
   }
+
+  // Drop database button
+  if (e.target.id === 'drop-db-btn') {
+    const db = Browser.getAttr(e.target, 'data-db')
+    if (confirm(`DROP database ${db}? All collections will be deleted.`)) {
+      Api.dropDatabase(db).then(() => Router.navigate('/admin')).catch(err => alert(err.message))
+    }
+  }
 })
 
 // Global form submission delegation
@@ -109,7 +127,7 @@ Browser.onSubmit(async e => {
       Api.addServer(url, fd.token)
       Api.setServer(url)
       Api.setToken(fd.token)
-      render()
+      Router.navigate('/admin')
     }
   } else if (form.id === 'login-form') {
     Api.setToken(fd.token)

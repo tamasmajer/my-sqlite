@@ -114,9 +114,12 @@ textarea { resize: vertical; }
 .muted { color: #888; }
 
 /* Server bar */
-.server-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; padding: 8px 12px; background: #eef1f6; border-radius: 6px; font-size: 12px; }
-.server-label { color: #555; }
-.server-list { display: flex; gap: 4px; align-items: center; }
+.server-bar { margin-bottom: 16px; padding: 6px 12px; background: #eef1f6; border-radius: 6px; font-size: 12px; }
+.server-bar-top { display: flex; align-items: center; gap: 8px; }
+.server-label { color: #555; font-weight: 500; font-family: monospace; }
+.server-panel { margin-top: 8px; padding-top: 8px; border-top: 1px solid #dde1e8; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.server-list { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.server-entry { display: inline-flex; align-items: center; gap: 1px; }
 .server-item { padding: 2px 8px; border-radius: 4px; color: #2563eb; font-size: 12px; }
 .server-item.active { background: #2563eb; color: #fff; pointer-events: none; }
 .server-item:hover { background: #dbeafe; text-decoration: none; }
