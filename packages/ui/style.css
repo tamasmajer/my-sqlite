@@ -112,3 +112,12 @@ textarea { resize: vertical; }
 
 .empty { color: #888; font-size: 14px; margin: 16px 0; }
 .muted { color: #888; }
+
+/* Server bar */
+.server-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; padding: 8px 12px; background: #eef1f6; border-radius: 6px; font-size: 12px; }
+.server-label { color: #555; }
+.server-list { display: flex; gap: 4px; align-items: center; }
+.server-item { padding: 2px 8px; border-radius: 4px; color: #2563eb; font-size: 12px; }
+.server-item.active { background: #2563eb; color: #fff; pointer-events: none; }
+.server-item:hover { background: #dbeafe; text-decoration: none; }
+.server-remove { font-size: 10px; }

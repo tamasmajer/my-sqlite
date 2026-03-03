@@ -8,29 +8,31 @@ async function render() {
   const app = Browser.getById('app')
   const r = Router.parse()
 
+  const serverBar = View.renderServerBar(Api.getServer(), Api.getServers())
+
   if (!Api.getToken()) {
-    Browser.setHtml(app, View.renderLogin())
+    Browser.setHtml(app, serverBar + View.renderLogin())
     return
   }
 
   try {
     if (!r.db) {
       const dbs = await Api.fetchDatabases()
-      Browser.setHtml(app, View.renderDatabases(dbs || []))
+      Browser.setHtml(app, serverBar + View.renderDatabases(dbs || []))
     } else if (!r.collection) {
       const cols = await Api.fetchCollections(r.db)
-      Browser.setHtml(app, View.renderCollections(r.db, cols))
+      Browser.setHtml(app, serverBar + View.renderCollections(r.db, cols))
     } else {
       const schema = await Api.fetchSchema(r.db, r.collection)
       const rows = await Api.fetchQuery(r.db, r.collection, r.q, r.skip, r.limit)
-      Browser.setHtml(app, View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit))
+      Browser.setHtml(app, serverBar + View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit))
     }
   } catch (err) {
     if (err.message === 'Unauthorized') {
       Api.setToken('')
-      Browser.setHtml(app, View.renderLogin('Unauthorized'))
+      Browser.setHtml(app, serverBar + View.renderLogin('Unauthorized'))
     } else {
-      Browser.setHtml(app, `<div class="error-page"><h1>Error</h1><p>${err.message}</p><a href="/admin">← Back</a></div>`)
+      Browser.setHtml(app, serverBar + `<div class="error-page"><h1>Error</h1><p>${err.message}</p><a href="/admin">← Back</a></div>`)
     }
   }
 }
@@ -41,6 +43,29 @@ Browser.onClick(e => {
   if (a && a.href && a.href.startsWith(Browser.getOrigin() + '/admin')) {
     e.preventDefault()
     Router.navigate(a.href)
+  }
+
+  // Switch server
+  const serverItem = Browser.closest(e.target, '.server-item')
+  if (serverItem) {
+    e.preventDefault()
+    const url = Browser.getAttr(serverItem, 'data-server')
+    Api.setServer(url)
+    // Set token from saved servers
+    if (url) {
+      const server = Api.getServers().find(s => s.url === url)
+      if (server && server.token) Api.setToken(server.token)
+    }
+    render()
+    return
+  }
+
+  // Remove server
+  if (e.target.classList && e.target.classList.contains('server-remove')) {
+    const url = Browser.getAttr(e.target, 'data-server')
+    Api.removeServer(url)
+    render()
+    return
   }
 
   // Delete single row button
@@ -78,7 +103,15 @@ Browser.onSubmit(async e => {
   const form = e.target
   const fd = Browser.getFormData(form)
 
-  if (form.id === 'login-form') {
+  if (form.id === 'add-server-form') {
+    const url = fd.url.replace(/\/+$/, '')
+    if (url) {
+      Api.addServer(url, fd.token)
+      Api.setServer(url)
+      Api.setToken(fd.token)
+      render()
+    }
+  } else if (form.id === 'login-form') {
     Api.setToken(fd.token)
     render()
   } else if (form.id === 'create-db-form') {
@@ -120,4 +153,7 @@ Browser.onSubmit(async e => {
 })
 
 Browser.onPopState(render)
-render()
+Api.fetchConfig().then(cfg => {
+  if (cfg.servers) Api.mergeServers(cfg.servers)
+  render()
+})

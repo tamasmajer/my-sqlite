@@ -4,6 +4,29 @@ function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+export function renderServerBar(currentServer, servers) {
+  const label = currentServer || 'Local'
+  const items = [
+    `<a href="#" class="server-item ${!currentServer ? 'active' : ''}" data-server="">Local</a>`,
+    ...servers.map(s =>
+      `<a href="#" class="server-item ${s.url === currentServer ? 'active' : ''}" data-server="${esc(s.url)}">${esc(s.url)}</a>` +
+      `<button class="btn-del server-remove" data-server="${esc(s.url)}">✕</button>`
+    )
+  ].join('')
+
+  return `
+    <div class="server-bar">
+      <span class="server-label">Server: <strong>${esc(label)}</strong></span>
+      <div class="server-list">${items}</div>
+      <form id="add-server-form" class="inline-form">
+        <input name="url" placeholder="https://host:port" style="max-width:220px">
+        <input name="token" type="password" placeholder="token" style="max-width:140px">
+        <button type="submit">Add</button>
+      </form>
+    </div>
+  `
+}
+
 function nav(crumbs) {
   const links = crumbs.map(c => c.href
     ? `<a href="${c.href}">${c.label}</a>`

@@ -7,6 +7,13 @@ export function route(req, res, config) {
   const url = new URL(req.url, `http://${req.headers.host}`)
   const path = url.pathname
 
+  // CORS preflight — must respond before auth check
+  if (req.method === 'OPTIONS' && req.headers['access-control-request-method']) {
+    res.writeHead(204, corsHeaders())
+    res.end()
+    return
+  }
+
   if (path === '/api' || path.startsWith('/api/')) {
     if (!Auth.checkApiAuth(req, config.token)) {
       json(res, 401, { ok: 0, error: 'Unauthorized' })
@@ -108,12 +115,6 @@ function handleCollection(req, res, config, dbName, collection, method, filterSt
   }
 
   if (method === 'OPTIONS') {
-    // Handle CORS preflight
-    if (req.headers['access-control-request-method']) {
-      res.writeHead(204, corsHeaders())
-      res.end()
-      return
-    }
     const db = Schema.openDb(config.datadir, dbName)
     const ct = req.headers['content-type'] || ''
     if (ct.includes('json')) {
@@ -139,6 +140,12 @@ function handleCollection(req, res, config, dbName, collection, method, filterSt
 function handleAdmin(req, res, config, url) {
   let relPath = url.pathname.replace(/^\/admin/, '') || '/'
   const uiDir = Fs.joinPath(process.cwd(), 'packages', 'ui')
+
+  if (relPath === '/config') {
+    const servers = parseServersFlag(config.servers)
+    json(res, 200, { servers })
+    return
+  }
 
   if (relPath === '/') relPath = '/index.html'
 
@@ -179,6 +186,14 @@ function readBody(req, cb) {
 function json(res, status, data) {
   res.writeHead(status, { 'content-type': 'application/json', ...corsHeaders() })
   res.end(JSON.stringify(data))
+}
+
+function parseServersFlag(val) {
+  if (!val) return []
+  return val.split(',').map(s => {
+    const [url, token] = s.trim().split('#')
+    return { url, token: token || '' }
+  }).filter(s => s.url)
 }
 
 function corsHeaders() {
