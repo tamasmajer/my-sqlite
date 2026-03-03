@@ -219,7 +219,7 @@ Zero errors across all tests. SQLite concurrency is safe because better-sqlite3 
 
 ## Coding Conventions
 
-This project uses **Flat JS** — JavaScript without classes, `this`, or method calls on objects. Every function call in the codebase looks like `Module.function(data)`, so you can always tell where a function is defined just by reading the call site.
+This project uses **Static JS** — JavaScript without classes, `this`, or method calls on objects. Every function call in the codebase looks like `Module.function(data)`, so you can always tell where a function is defined just by reading the call site.
 
 ```js
 import * as Schema from './schema.js'

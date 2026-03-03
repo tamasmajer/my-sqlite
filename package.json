@@ -1,7 +1,7 @@
 {
   "name": "my-sqlite",
   "private": true,
-  "flat": true,
+  "static": true,
   "type": "module",
   "workspaces": [
     "packages/*"
