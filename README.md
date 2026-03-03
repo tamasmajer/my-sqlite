@@ -97,6 +97,10 @@ await Db.del(users, {})
 await Db.del(users)
 ```
 
+## Admin UI
+
+A built-in web UI is served at `/admin`. It lets you browse databases and collections, query and filter documents, insert/upsert data, manage indexes, and delete or drop collections — all without writing code. If a `--token` is set, the UI will prompt for it on first visit.
+
 ## Raw HTTP API
 
 Each client method maps to a standard HTTP verb. Use `cURL` or any HTTP client directly:
