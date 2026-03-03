@@ -4,49 +4,44 @@ import * as Browser from './access/browser.js'
 import * as Router from './router.js'
 import * as View from './view.js'
 
+function page(app, content) {
+  const sidebar = View.renderSidebar(Api.getServer(), Api.getServers())
+  Browser.setHtml(app, View.layout(sidebar, content))
+}
+
 async function render() {
   const app = Browser.getById('app')
   const r = Router.parse()
 
-  const serverBar = View.renderServerBar(Api.getServer(), Api.getServers())
-
   if (!Api.getToken()) {
-    Browser.setHtml(app, serverBar + View.renderLogin())
+    page(app, View.renderLogin())
     return
   }
 
   try {
     if (!r.db) {
       const dbs = await Api.fetchDatabases()
-      Browser.setHtml(app, serverBar + View.renderDatabases(dbs || []))
+      page(app, View.renderDatabases(dbs || []))
     } else if (!r.collection) {
       const cols = await Api.fetchCollections(r.db)
-      Browser.setHtml(app, serverBar + View.renderCollections(r.db, cols))
+      page(app, View.renderCollections(r.db, cols))
     } else {
       const schema = await Api.fetchSchema(r.db, r.collection)
       const rows = await Api.fetchQuery(r.db, r.collection, r.q, r.skip, r.limit)
-      Browser.setHtml(app, serverBar + View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit))
+      page(app, View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit))
     }
   } catch (err) {
     if (err.message === 'Unauthorized') {
       Api.setToken('')
-      Browser.setHtml(app, serverBar + View.renderLogin('Unauthorized'))
+      page(app, View.renderLogin('Unauthorized'))
     } else {
-      Browser.setHtml(app, serverBar + `<div class="error-page"><h1>Error</h1><p>${err.message}</p><a href="/admin">← Back</a></div>`)
+      page(app, `<div class="error-page"><h1>Error</h1><p>${err.message}</p><a href="/admin">← Back</a></div>`)
     }
   }
 }
 
 // Global click delegation for SPA links
 Browser.onClick(e => {
-  // Toggle server panel
-  if (e.target.id === 'server-toggle') {
-    e.preventDefault()
-    const panel = document.querySelector('.server-panel')
-    if (panel) panel.style.display = panel.style.display === 'none' ? '' : 'none'
-    return
-  }
-
   // Switch server
   const serverItem = Browser.closest(e.target, '.server-item')
   if (serverItem) {

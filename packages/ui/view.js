@@ -1,35 +1,40 @@
 // View — HTML rendering functions (pure, no side effects)
 
+function safeParseJson(s) {
+  try { return JSON.parse(s) } catch { return {} }
+}
+
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export function renderServerBar(currentServer, servers) {
-  const label = currentServer || 'Local'
+export function renderSidebar(currentServer, servers) {
   const items = [
     `<a href="#" class="server-item ${!currentServer ? 'active' : ''}" data-server="">Local</a>`,
-    ...servers.map(s =>
-      `<span class="server-entry"><a href="#" class="server-item ${s.url === currentServer ? 'active' : ''}" data-server="${esc(s.url)}">${esc(s.url)}</a>` +
-      `<button class="btn-del server-remove" data-server="${esc(s.url)}">✕</button></span>`
-    )
+    ...servers.map(s => {
+      const label = s.url.replace(/^https?:\/\//, '')
+      return `<div class="server-entry">` +
+        `<a href="#" class="server-item ${s.url === currentServer ? 'active' : ''}" data-server="${esc(s.url)}">${esc(label)}</a>` +
+        `<button class="btn-del server-remove" data-server="${esc(s.url)}">✕</button>` +
+        `</div>`
+    })
   ].join('')
 
   return `
-    <div class="server-bar">
-      <div class="server-bar-top">
-        <span class="server-label">${esc(label)}</span>
-        <a href="#" id="server-toggle" class="muted">switch</a>
-      </div>
-      <div class="server-panel" style="display:none">
-        <div class="server-list">${items}</div>
-        <form id="add-server-form" class="inline-form">
-          <input name="url" placeholder="https://host:port" style="max-width:220px">
-          <input name="token" type="password" placeholder="token" style="max-width:140px">
-          <button type="submit">Add</button>
-        </form>
-      </div>
-    </div>
+    <aside class="sidebar">
+      <div class="sidebar-title">Servers</div>
+      <div class="server-list">${items}</div>
+      <form id="add-server-form" class="sidebar-form">
+        <input name="url" placeholder="host:port">
+        <input name="token" type="password" placeholder="token">
+        <button type="submit">Add</button>
+      </form>
+    </aside>
   `
+}
+
+export function layout(sidebar, content) {
+  return `<div class="app-layout">${sidebar}<main class="main-content">${content}</main></div>`
 }
 
 function nav(crumbs) {
@@ -171,19 +176,30 @@ export function renderData(dbName, collName, rows, info, q, skip, limit) {
   const idxCols = info.index || []
   const keyField = info.key || 'id'
 
+  const curFilter = safeParseJson(q)
+  const curSort = curFilter.$sort || {}
+
   let table = '<p class="empty">No rows match the query.</p>'
   if (rows.length) {
     const ths = cols.map(c => {
       let markers = ''
       if (c === keyField || (Array.isArray(keyField) && keyField.includes(c))) markers += ' 🔑'
       if (idxCols.includes(c)) markers += ' ⚡'
-      return `<th>${c}${markers}</th>`
+      const dir = curSort[c]
+      const arrow = dir === 1 ? ' ▲' : dir === -1 ? ' ▼' : ''
+      const nextDir = dir === 1 ? -1 : dir === -1 ? 0 : 1
+      const nextFilter = { ...curFilter }
+      if (nextDir === 0) { delete nextFilter.$sort }
+      else { nextFilter.$sort = { [c]: nextDir } }
+      const href = `/admin/${dbName}/${collName}?q=${encodeURIComponent(JSON.stringify(nextFilter))}&skip=0`
+      return `<th><a href="${href}" class="sort-header">${c}${markers}${arrow}</a></th>`
     }).join('') + '<th class="actions-col"></th>'
 
     const trs = rows.map(r => {
       const tds = cols.map(c => {
         const v = r[c]
-        const display = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : v
+        if (v === null || v === undefined) return `<td class="null-val">null</td>`
+        const display = (typeof v === 'object') ? JSON.stringify(v) : v
         return `<td>${esc(display)}</td>`
       }).join('')
       const idVal = typeof keyField === 'string' ? r[keyField] : null
