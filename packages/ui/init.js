@@ -9,6 +9,30 @@ function page(app, content) {
   Browser.setHtml(app, View.layout(sidebar, content))
 }
 
+// Cell value popover
+let _pop = null
+function showPopover(td) {
+  if (!_pop) {
+    _pop = document.createElement('div')
+    _pop.className = 'cell-popover'
+    document.body.appendChild(_pop)
+  }
+  _pop.textContent = td.dataset.copy
+  _pop.style.display = 'block'
+  const r = td.getBoundingClientRect()
+  _pop.style.left = Math.min(r.left, window.innerWidth - 520) + 'px'
+  const below = window.innerHeight - r.bottom
+  if (below > 100 || below > r.top) {
+    _pop.style.top = (r.bottom + 6) + 'px'
+    _pop.style.bottom = 'auto'
+  } else {
+    _pop.style.bottom = (window.innerHeight - r.top + 6) + 'px'
+    _pop.style.top = 'auto'
+  }
+}
+function hidePopover() { if (_pop) _pop.style.display = 'none' }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hidePopover() })
+
 async function render() {
   const app = Browser.getById('app')
   const r = Router.parse()
@@ -42,6 +66,16 @@ async function render() {
 
 // Global click delegation for SPA links
 Browser.onClick(e => {
+  // Hide popover on any outside click
+  if (_pop && !_pop.contains(e.target)) hidePopover()
+
+  // Click on data cell — show popover with full value
+  const td = Browser.closest(e.target, 'td[data-copy]')
+  if (td) {
+    showPopover(td)
+    return
+  }
+
   // Switch server
   const serverItem = Browser.closest(e.target, '.server-item')
   if (serverItem) {

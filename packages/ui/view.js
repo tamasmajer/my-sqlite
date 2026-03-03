@@ -200,7 +200,7 @@ export function renderData(dbName, collName, rows, info, q, skip, limit) {
         const v = r[c]
         if (v === null || v === undefined) return `<td class="null-val">null</td>`
         const display = (typeof v === 'object') ? JSON.stringify(v) : v
-        return `<td>${esc(display)}</td>`
+        return `<td data-copy="${esc(String(display))}">${esc(display)}</td>`
       }).join('')
       const idVal = typeof keyField === 'string' ? r[keyField] : null
       const delBtn = idVal != null
