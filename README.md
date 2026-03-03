@@ -4,8 +4,13 @@ A thin REST layer over SQLite. Store and query JSON documents in Mongo-like coll
 
 | Method | Endpoint | Body / Params | Description |
 |--------|----------|---------------|-------------|
+| Method | Endpoint | Body / Params | Description |
+|--------|----------|---------------|-------------|
 | `GET` | `/api` | — | List databases |
 | `GET` | `/api/:db` | — | List collections in a database |
+| `DELETE` | `/api/:db` | — | Drop database |
+| `PUT` | `/api/:db` | `{ coll: [docs], ... }` | Multi-collection upsert |
+| `POST` | `/api/:db` | `{ coll: [ops], ... }` | Mixed batch operations |
 | `GET` | `/api/:db/:coll` | `?{filter}` | Query documents |
 | `PUT` | `/api/:db/:coll` | `{ id, ...fields }` | Upsert a document |
 | `PATCH` | `/api/:db/:coll` | `{ id, ...fields }` | Partial update |
@@ -95,6 +100,35 @@ await Db.del(users, {})
 
 // Drop the entire collection permanently:
 await Db.del(users)
+```
+
+### Batch Operations
+
+Batch calls reduce network round-trips by sending multiple operations in a single request. All operations within a batch run in a single SQLite transaction.
+
+**Multi-collection upsert** — `PUT /api/:db`:
+```js
+const db = 'localhost:3000/api/mydb'
+await Db.put(db, {
+  users:  [{ id: 'u1', name: 'Alice' }, { id: 'u2', name: 'Bob' }],
+  orders: [{ id: 'o1', userId: 'u1', total: 50 }]
+})
+// → { ok: 1, users: { ok: 1 }, orders: { ok: 1 } }
+```
+
+**Mixed batch** — `POST /api/:db` — combine PUT, PATCH, and DELETE across collections:
+```js
+await Db.post(db, {
+  users: [
+    { PUT: [{ id: 'u3', name: 'Charlie' }] },
+    { PATCH: [{ id: 'u1', age: 31 }] },
+    { DELETE: { id: 'u2' } }
+  ],
+  orders: [
+    { PUT: [{ id: 'o2', userId: 'u3', total: 75 }] }
+  ]
+})
+// → { ok: 1, users: [{ ok: 1 }, { ok: 1 }, { ok: 1 }], orders: [{ ok: 1 }] }
 ```
 
 ## Admin UI
