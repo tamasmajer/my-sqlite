@@ -144,9 +144,13 @@ export function isDbEmpty(db) {
   return tables.length === 0
 }
 
+export function jsonColumns(db, collection) {
+  return Sql.columns(db, collection).filter(c => c.type === 'JSON').map(c => c.name)
+}
+
 function inferType(value) {
   if (typeof value === 'number') return Number.isInteger(value) ? 'INTEGER' : 'REAL'
   if (typeof value === 'boolean') return 'INTEGER'
-  if (Array.isArray(value) || (typeof value === 'object' && value !== null)) return 'TEXT'
+  if (Array.isArray(value) || (typeof value === 'object' && value !== null)) return 'JSON'
   return 'TEXT'
 }

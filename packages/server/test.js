@@ -20,7 +20,7 @@ async function run() {
   console.log(await Db.get(users, 'u1'))
 
   console.log('--- GET: filter + sort ---')
-  console.log(await Db.get(users, { age: { $gte: 30 }, $sort: '-age' }))
+  console.log(await Db.get(users, { age: { $gte: 30 }, $sort: { age: -1 } }))
 
   console.log('--- PATCH: partial update ---')
   console.log(await Db.patch(users, { id: 'u1', age: 31 }))

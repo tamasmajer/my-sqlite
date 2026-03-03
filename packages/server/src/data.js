@@ -81,23 +81,18 @@ export function toSqlValue(v) {
   return v
 }
 
-export function fromSqlRow(row) {
+export function fromSqlRows(rows, jsonCols) {
+  if (!jsonCols || jsonCols.length === 0) return rows
+  return rows.map(row => fromSqlRow(row, jsonCols))
+}
+
+function fromSqlRow(row, jsonCols) {
   if (!row) return row
-  const result = {}
-  for (const [k, v] of Object.entries(row)) {
-    result[k] = tryParseJson(v)
+  const result = { ...row }
+  for (const col of jsonCols) {
+    if (typeof result[col] === 'string') {
+      try { result[col] = JSON.parse(result[col]) } catch { /* keep as string */ }
+    }
   }
   return result
-}
-
-export function fromSqlRows(rows) {
-  return rows.map(fromSqlRow)
-}
-
-function tryParseJson(v) {
-  if (typeof v !== 'string') return v
-  if ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('{') && v.endsWith('}'))) {
-    try { return JSON.parse(v) } catch { return v }
-  }
-  return v
 }

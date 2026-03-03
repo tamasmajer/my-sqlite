@@ -122,7 +122,7 @@ export function renderData(dbName, collName, rows, info, q, skip, limit) {
 
   const filterForm = `
     <form id="filter-form" data-db="${dbName}" data-coll="${collName}" class="filter-bar">
-      <input name="q" value="${esc(q)}" placeholder='{"age":{"$gte":30},"$sort":"-age"}'>
+      <input name="q" value="${esc(q)}" placeholder='{"age":{"$gte":30},"$sort":{"age":-1}}'>
       <button type="submit">Query</button>
     </form>
   `

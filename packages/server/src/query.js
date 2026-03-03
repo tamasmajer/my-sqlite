@@ -1,7 +1,7 @@
 import * as Sql from './access/sqlite.js'
 
 // Parse JSON filter string into SQL components
-// Input: raw query string (JSON), e.g. '{"age":{"$gte":30},"$sort":"-age","$limit":10}'
+// Input: raw query string (JSON), e.g. '{"age":{"$gte":30},"$sort":{"age":-1},"$limit":10}'
 // Returns: { where, params, order, limit, offset }
 export function parseFilter(filterStr) {
   if (!filterStr) return { where: '', params: [], order: '', limit: null, offset: null }
@@ -88,9 +88,7 @@ function opToSql(field, op, value) {
 }
 
 function parseSortValue(val) {
-  const parts = Array.isArray(val) ? val : [val]
-  return parts.map(s => {
-    if (s.startsWith('-')) return `"${s.slice(1)}" DESC`
-    return `"${s}" ASC`
-  }).join(', ')
+  return Object.entries(val).map(([field, dir]) =>
+    `"${field}" ${dir === -1 ? 'DESC' : 'ASC'}`
+  ).join(', ')
 }

@@ -1,94 +1,144 @@
 # my-sqlite
 
-A lightweight REST API over SQLite. NoSQL-like collections backed by real SQL columns. HTTP method = intent.
+A thin REST layer over SQLite. Store and query JSON documents in Mongo-like collections using REST operations — tables and columns are created automatically. Data is organised as databases and collections (`/api/:db/:collection`), with one SQLite file per database. Each document requires an `id` primary key; additional indexes can be added.
+
+| Method | Endpoint | Body / Params | Description |
+|--------|----------|---------------|-------------|
+| `GET` | `/api` | — | List databases |
+| `GET` | `/api/:db` | — | List collections in a database |
+| `GET` | `/api/:db/:coll` | `?{filter}` | Query documents |
+| `PUT` | `/api/:db/:coll` | `{ id, ...fields }` | Upsert a document |
+| `PATCH` | `/api/:db/:coll` | `{ id, ...fields }` | Partial update |
+| `DELETE` | `/api/:db/:coll` | `?{ id }` / `?{}` / *(none)* | Delete matching / delete all docs / drop collection |
+| `OPTIONS` | `/api/:db/:coll` | `{ index: [...] }` / *(none)* | Set indexes / read schema |
 
 ## Quick Start
 
+Start the server:
 ```bash
 npm install
 node packages/server/src/server.js --port 3000
 ```
+*The Admin UI will be available at [http://localhost:3000/admin](http://localhost:3000/admin)*
 
-Admin UI at `http://localhost:3000/admin`
+## How it works
 
-## API
-
-### Endpoints
-
-| Endpoint | GET | PUT | PATCH | DELETE | OPTIONS |
-|----------|-----|-----|-------|--------|---------|
-| `/api` | list dbs | | | | |
-| `/api/:db` | list collections | | | | |
-| `/api/:db/:coll` | query | upsert | merge update | delete / drop | schema |
-
-### Examples
-
-```bash
-# Upsert
-curl -X PUT localhost:3000/api/mydb/users \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"u1","name":"Alice","age":30}'
-
-# Query
-curl 'localhost:3000/api/mydb/users?{"age":{"$gte":25},"$sort":"-age","$limit":10}'
-
-# Partial update
-curl -X PATCH localhost:3000/api/mydb/users \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"u1","age":31}'
-
-# Delete by query
-curl -X DELETE 'localhost:3000/api/mydb/users?{"id":"u1"}'
-
-# Set indexes
-curl -X OPTIONS localhost:3000/api/mydb/users \
-  -H 'Content-Type: application/json' \
-  -d '{"index":["name","age"]}'
-
-# Read schema
-curl -X OPTIONS localhost:3000/api/mydb/users
-```
-
-### Query Syntax
-
-JSON in query string: `?{"field":{"$op":value},"$sort":"-field","$limit":N}`
-
-**Filters:** `$gt`, `$lt`, `$gte`, `$lte`, `$ne`, `$in`, `$nin`, `$like`
-**Modifiers:** `$sort` (`-` prefix = DESC), `$limit`, `$skip`
-
-### DELETE Semantics
-
-- `?{"id":"u1"}` — delete matching docs
-- `?{}` — delete all data, keep table + indexes
-- *(no query)* — drop collection entirely
-
-## Client Library
+Every operation targets a collection URL, e.g. `/api/mydb/users`:
 
 ```js
 import * as Db from 'my-sqlite-client'
 
 const users = 'localhost:3000/api/mydb/users'
 
-await Db.get(users, { age: { $gte: 30 }, $sort: '-age' })
-await Db.get(users, 'u1')
-await Db.get(users, {})
-await Db.put(users, { id: Db.createId(), name: 'Alice', age: 30 })
+// 1. Save a document (creates table & columns automatically)
+await Db.put(users, { id: 'u1', name: 'Alice', age: 30 })
+
+// 2. Query documents (Mongo-like syntax)
+const adults = await Db.get(users, { age: { $gte: 25 }, $sort: { age: -1 } })
+
+// 3. Update specific fields
 await Db.patch(users, { id: 'u1', age: 31 })
+
+// 4. Delete a document
 await Db.del(users, 'u1')
-await Db.del(users, {})            // truncate
-await Db.del(users)                 // drop
-await Db.options(users, { index: ['age'] })
-await Db.options(users)             // read schema
 ```
 
-## Server Flags
+## Core Concepts
+
+### Querying Data
+
+Pass a JSON filter object to `Db.get`. Fields and operators work like MongoDB:
+
+```js
+await Db.get(users, 'u1')                                                       // by id
+await Db.get(users, { role: 'admin', $sort: { createdAt: -1 }, $limit: 10 })   // filter
+```
+
+Supported operators:
+- **Comparison:** `$gt`, `$lt`, `$gte`, `$lte`, `$ne`
+- **Array:** `$in`, `$nin`
+- **String:** `$like`
+- **Modifiers:** `$sort` (object, e.g. `{ age: -1 }` for DESC), `$limit`, `$skip`
+
+### Inserting and Updating
+
+**Upsert:** `id` is the default document key. If a record with that `id` exists it is replaced; otherwise a new one is created. Any new fields automatically become new columns.
+```js
+await Db.put(users, { id: Db.createId(), name: 'Bob', email: 'bob@example.com' })
+```
+
+**Partial update:** Send only the fields to change, along with the `id`.
+```js
+await Db.patch(users, { id: 'u1', status: 'active' })
+```
+
+### JSON Fields
+
+Array and object values are stored as JSON text and automatically deserialized on read. Columns are typed as `JSON` in the schema so the server knows which fields to parse — no guessing.
+
+```js
+await Db.put(users, { id: 'u1', tags: ['admin', 'dev'], prefs: { theme: 'dark' } })
+const user = await Db.get(users, 'u1')  // tags is an array, prefs is an object
+```
+
+### Managing Collections
+
+```js
+// Define indexes for faster queries:
+await Db.options(users, { index: ['age', 'email'] })
+
+// Read the current auto-generated schema:
+const schema = await Db.options(users)
+
+// Delete all records but keep the table and indexes:
+await Db.del(users, {})
+
+// Drop the entire collection permanently:
+await Db.del(users)
+```
+
+## Raw HTTP API
+
+Each client method maps to a standard HTTP verb. Use `cURL` or any HTTP client directly:
+
+```bash
+# Save a document (PUT)
+curl -X PUT localhost:3000/api/mydb/users \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"u1","name":"Alice","age":30}'
+
+# Query documents (GET with JSON in the query string)
+curl 'localhost:3000/api/mydb/users?{"age":{"$gte":25},"$sort":{"age":-1}}'
+```
+
+## Server Configuration
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--port` | `3000` | Port |
+| `--port` | `3000` | Server listening port |
 | `--host` | `localhost` | Bind address |
-| `--datadir` | `./data` | SQLite files directory |
-| `--token` | `$MY_SQLITE_TOKEN` | Auth token |
-| `--tls` | `off` | Enable TLS |
-| `--cert` | | TLS cert path |
-| `--key` | | TLS key path |
+| `--datadir` | `./data` | Directory to store SQLite `.db` files |
+| `--token` | `$MY_SQLITE_TOKEN` | Authentication token for the API |
+| `--tls` | `off` | Enable TLS (`on` or `off`) |
+| `--cert` | | Path to TLS certificate |
+| `--key` | | Path to TLS key |
+
+## Auth & Remote Access
+
+When `--token` is set, every request must include it as a `Bearer` token. The client reads the token from the connection string — no extra config needed:
+
+```js
+// Token in the URL hash (recommended)
+const users = 'myserver.com/api/mydb/users#my-secret-token'
+
+// Or via environment variable MY_SQLITE_TOKEN (picked up automatically)
+const users = 'myserver.com/api/mydb/users'
+```
+
+For raw HTTP requests, pass it in the `Authorization` header:
+```bash
+curl -H 'Authorization: Bearer my-secret-token' \
+  'https://myserver.com/api/mydb/users?{"age":{"$gte":25}}'
+```
+
+For remote access over the internet, enable TLS with `--tls on --cert cert.pem --key key.pem`. Without TLS the token is sent in plaintext — only use unencrypted connections on trusted networks or localhost.

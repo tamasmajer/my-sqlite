@@ -64,7 +64,8 @@ function handleCollection(req, res, config, dbName, collection, method, filterSt
   if (method === 'GET') {
     const db = Schema.openDb(config.datadir, dbName)
     const rows = Data.query(db, collection, filterStr)
-    json(res, 200, Data.fromSqlRows(rows))
+    const jsonCols = Schema.jsonColumns(db, collection)
+    json(res, 200, Data.fromSqlRows(rows, jsonCols))
     return
   }
 
