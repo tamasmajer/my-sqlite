@@ -180,3 +180,39 @@ curl -H 'Authorization: Bearer my-secret-token' \
 ```
 
 For remote access over the internet, enable TLS with `--tls on --cert cert.pem --key key.pem`. Without TLS the token is sent in plaintext — only use unencrypted connections on trusted networks or localhost.
+
+## Stress Test Results
+
+Tested over HTTPS from a remote client against a minimal VPS:
+
+**Server:** 1 vCPU (AMD EPYC 7282), 1 GB RAM, Ubuntu 24.04, Node.js, ~47ms network latency
+
+### Throughput
+
+| Operation | Time | Notes |
+|-----------|------|-------|
+| Sequential PUT (100 docs) | 5,285ms | ~53ms/req (network-bound) |
+| Batch PUT 1,000 docs | 144ms | Single request |
+| Batch PUT 10,000 docs | 764ms | Single request |
+| Batch PUT 3 colls × 1,000 docs | 200ms | Multi-collection |
+| Sequential 10 colls × 100 docs | 508ms | 10 requests |
+| Batch 10 colls × 100 docs | 91ms | 1 request — **5.6× faster** |
+| Mixed POST (put+patch+del) | 53ms | Single transaction |
+| 1,000 sequential GETs | 46,632ms | ~47ms/req (network-bound) |
+
+### Concurrency
+
+| Operation | Time | Errors |
+|-----------|------|--------|
+| 50 concurrent reads | 212ms (4.2ms avg) | 0 |
+| 200 concurrent reads | 447ms (2.2ms avg) | 0 |
+| 500 concurrent reads | 724ms (1.4ms avg) | 0 |
+| 200 concurrent PUTs (same row) | 477ms | 0 |
+| 500 concurrent PUTs (diff rows) | 682ms | 0 |
+| 400 reads + writes simultaneous | 234ms | 0 |
+| 200 deletes + writes (overlapping) | 132ms | 0 |
+| 10 × 1,000-doc batch PUTs | 1,016ms | 0 |
+| 100 create-read-delete cycles | 240ms | 0 |
+| 200 concurrent schema mutations | 1,238ms | 0 |
+
+Zero errors across all tests. SQLite concurrency is safe because better-sqlite3 is synchronous and Node.js is single-threaded — writes are effectively serialized. The main bottleneck is network latency; batch calls are the best way to improve throughput.
