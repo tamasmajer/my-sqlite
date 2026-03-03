@@ -43,6 +43,12 @@ export async function put(conn, docOrDocs) {
   return Fetch.putJson(conn.endpoint, docOrDocs, authHeaders(conn))
 }
 
+// POST — mixed batch operations (db-level)
+export async function post(conn, ops) {
+  if (typeof conn === 'string') conn = connect(conn)
+  return Fetch.postJson(conn.endpoint, ops, authHeaders(conn))
+}
+
 // PATCH — partial update
 export async function patch(conn, docOrDocs) {
   if (typeof conn === 'string') conn = connect(conn)

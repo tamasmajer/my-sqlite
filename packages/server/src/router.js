@@ -1,6 +1,7 @@
 import * as Schema from './schema.js'
 import * as Data from './data.js'
 import * as Auth from './auth.js'
+import * as Sql from './access/sqlite.js'
 import * as Fs from './access/fs.js'
 
 export function route(req, res, config) {
@@ -49,7 +50,7 @@ function handleApi(req, res, config, url) {
       return
     }
 
-    // /api/:db — list or drop database
+    // /api/:db — list, drop, batch
     if (!collection) {
       if (method === 'GET') {
         const db = Schema.openDb(config.datadir, dbName)
@@ -57,6 +58,33 @@ function handleApi(req, res, config, url) {
       } else if (method === 'DELETE') {
         Schema.dropDb(config.datadir, dbName)
         json(res, 200, { ok: 1, dropped: true })
+      } else if (method === 'PUT') {
+        readBody(req, body => {
+          try {
+            const db = Schema.openDb(config.datadir, dbName)
+            const result = { ok: 1 }
+            Sql.transaction(db, () => {
+              for (const [coll, docs] of Object.entries(body)) {
+                Data.upsert(db, coll, docs)
+                result[coll] = { ok: 1 }
+              }
+            })
+            json(res, 200, result)
+          } catch (err) { json(res, 500, { ok: 0, error: err.message }) }
+        })
+      } else if (method === 'POST') {
+        readBody(req, body => {
+          try {
+            const db = Schema.openDb(config.datadir, dbName)
+            const result = { ok: 1 }
+            Sql.transaction(db, () => {
+              for (const [coll, ops] of Object.entries(body)) {
+                result[coll] = ops.map(op => execOp(db, coll, op))
+              }
+            })
+            json(res, 200, result)
+          } catch (err) { json(res, 500, { ok: 0, error: err.message }) }
+        })
       } else {
         json(res, 405, { ok: 0, error: 'Method not allowed' })
       }
@@ -198,6 +226,22 @@ function parseServersFlag(val) {
     const [url, token] = s.trim().split('#')
     return { url, token: token || '' }
   }).filter(s => s.url)
+}
+
+function execOp(db, coll, op) {
+  const [method, data] = Object.entries(op)[0]
+  switch (method.toUpperCase()) {
+    case 'PUT': return Data.upsert(db, coll, data)
+    case 'PATCH': return Data.patch(db, coll, data)
+    case 'DELETE': return Data.remove(db, coll, typeof data === 'string' ? data : JSON.stringify(data))
+    case 'GET': {
+      const filterStr = typeof data === 'string' ? data : JSON.stringify(data)
+      const rows = Data.query(db, coll, filterStr)
+      const jsonCols = Schema.jsonColumns(db, coll)
+      return Data.fromSqlRows(rows, jsonCols)
+    }
+    default: return { ok: 0, error: `Unknown op: ${method}` }
+  }
 }
 
 function corsHeaders() {

@@ -12,6 +12,15 @@ export async function putJson(url, body, headers = {}) {
   return res.json()
 }
 
+export async function postJson(url, body, headers = {}) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  })
+  return res.json()
+}
+
 export async function patchJson(url, body, headers = {}) {
   const res = await fetch(url, {
     method: 'PATCH',
