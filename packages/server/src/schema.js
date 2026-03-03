@@ -139,6 +139,10 @@ export function dropDb(datadir, name) {
   Fs.remove(base + '-shm')
 }
 
+export function tableExists(db, collection) {
+  return Sql.tables(db).includes(collection)
+}
+
 export function isDbEmpty(db) {
   const tables = Sql.tables(db).filter(n => n !== '_meta')
   return tables.length === 0
