@@ -1,116 +1,217 @@
 // View — HTML rendering functions (pure, no side effects)
 
 function esc(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function nav(crumbs) {
   const links = crumbs.map(c => c.href
     ? `<a href="${c.href}">${c.label}</a>`
-    : `<span>${c.label}</span>`
-  ).join(' / ')
-  return `<div class="nav">${links}</div>`
+    : `<span class="current">${c.label}</span>`
+  ).join(' <span class="sep">/</span> ')
+  return `<nav class="breadcrumb">${links}</nav>`
+}
+
+function badge(text, cls = '') {
+  return `<span class="badge ${cls}">${text}</span>`
 }
 
 export function renderLogin(error = '') {
   return `
-    <h1>my-sqlite admin</h1>
-    ${error ? `<p style="color:red;margin-bottom:8px">${error}</p>` : ''}
-    <form id="login-form">
-      <label>Token: <input type="password" name="token" autofocus></label>
-      <button type="submit">Login</button>
-    </form>
+    <div class="login-card">
+      <h1>my-sqlite</h1>
+      <p class="subtitle">Admin Console</p>
+      ${error ? `<div class="error-msg">${error}</div>` : ''}
+      <form id="login-form">
+        <input type="password" name="token" placeholder="Enter token..." autofocus>
+        <button type="submit">Login</button>
+      </form>
+    </div>
   `
 }
 
 export function renderDatabases(dbs) {
-  const list = dbs.length
-    ? dbs.map(d => `<li><a href="/admin/${d}">${d}</a></li>`).join('')
-    : '<li>No databases yet</li>'
+  const cards = dbs.length
+    ? dbs.map(d => `
+        <a href="/admin/${d}" class="card">
+          <div class="card-icon">🗄</div>
+          <div class="card-label">${d}</div>
+        </a>
+      `).join('')
+    : '<p class="empty">No databases yet. Create one below or insert data via the API.</p>'
 
-  const postForm = `
-    <hr style="margin:24px 0;border:0;border-top:1px solid #ddd">
-    <form id="create-db-form">
-      <h3 style="margin-bottom:8px">Create Database</h3>
-      <div class="flex">
-        <input name="db" required placeholder="e.g. mydb">
-        <button type="submit">Go to Database</button>
-      </div>
-    </form>
+  return nav([{ label: 'admin' }]) + `
+    <div class="header">
+      <h1>Databases</h1>
+      ${badge(dbs.length + ' total', 'muted')}
+    </div>
+    <div class="card-grid">${cards}</div>
+    <div class="panel">
+      <h3>Open Database</h3>
+      <form id="create-db-form" class="inline-form">
+        <input name="db" required placeholder="database name">
+        <button type="submit">Go</button>
+      </form>
+    </div>
   `
-
-  return nav([{ label: 'admin' }]) + `<h1>Databases</h1><ul>${list}</ul>` + postForm
 }
 
 export function renderCollections(dbName, collections) {
   const entries = Object.entries(collections || {})
 
-  const postForm = `
-    <hr style="margin:24px 0;border:0;border-top:1px solid #ddd">
-    <form id="post-batch-db-form" data-db="${dbName}">
-      <h3 style="margin-bottom:8px">Post to <code>${dbName}</code></h3>
-      <textarea name="payload" rows="5" placeholder='{"new_collection": [{"name":"Bob"}], "existing": {"index":["name"]}}'></textarea>
-      <button type="submit">Post</button>
-    </form>
-  `
+  const crumbs = nav([{ label: 'admin', href: '/admin' }, { label: dbName }])
 
   if (!entries.length) {
-    return nav([{ label: 'admin', href: '/admin' }, { label: dbName }]) + `<h1>${dbName}</h1><p>No collections</p>` + postForm
+    return crumbs + `
+      <div class="header"><h1>${dbName}</h1></div>
+      <p class="empty">No collections. Insert data via PUT to create one.</p>
+      ${renderPutForm(dbName)}
+    `
   }
 
   const rows = entries.map(([name, info]) => {
     const cols = info.columns.join(', ')
-    const idx = info.index.length ? info.index.join(', ') : '-'
-    return `<tr><td><a href="/admin/${dbName}/${name}">${name}</a></td><td>${cols}</td><td>${idx}</td></tr>`
+    const idx = info.index.length ? info.index.map(i => badge(i, 'idx')).join(' ') : '<span class="muted">none</span>'
+    const key = info.key || 'id'
+    return `<tr>
+      <td><a href="/admin/${dbName}/${name}">${name}</a></td>
+      <td class="mono">${cols}</td>
+      <td>${idx}</td>
+      <td class="mono">${key}</td>
+    </tr>`
   }).join('')
 
-  const table = `<table><tr><th>Collection</th><th>Columns</th><th>Indexes</th></tr>${rows}</table>`
+  const table = `
+    <table>
+      <thead><tr><th>Collection</th><th>Columns</th><th>Indexes</th><th>Key</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `
 
-  return nav([{ label: 'admin', href: '/admin' }, { label: dbName }]) + `<h1>${dbName}</h1>` + table + postForm
+  return crumbs + `
+    <div class="header">
+      <h1>${dbName}</h1>
+      ${badge(entries.length + ' collections', 'muted')}
+    </div>
+    ${table}
+    ${renderPutForm(dbName)}
+  `
 }
 
-export function renderData(dbName, collName, data, info, q, skip, limit) {
-  const rows = data[collName] || []
+function renderPutForm(dbName) {
+  return `
+    <div class="panel">
+      <h3>Insert Data</h3>
+      <form id="put-form" data-db="${dbName}">
+        <div class="inline-form" style="margin-bottom:8px">
+          <input name="collection" required placeholder="collection name" style="max-width:200px">
+        </div>
+        <textarea name="payload" rows="4" placeholder='[{"id":"1","name":"Alice","age":30}]'></textarea>
+        <button type="submit">PUT</button>
+      </form>
+    </div>
+  `
+}
+
+export function renderData(dbName, collName, rows, info, q, skip, limit) {
+  const crumbs = nav([
+    { label: 'admin', href: '/admin' },
+    { label: dbName, href: `/admin/${dbName}` },
+    { label: collName }
+  ])
+
   const filterForm = `
-    <form id="filter-form" data-db="${dbName}" data-coll="${collName}">
-      <div class="flex">
-        <input name="q" value="${esc(q)}" placeholder='{"age":{"$gte":30},"$sort":"-age","$limit":20}'>
-        <button type="submit">Get</button>
-      </div>
+    <form id="filter-form" data-db="${dbName}" data-coll="${collName}" class="filter-bar">
+      <input name="q" value="${esc(q)}" placeholder='{"age":{"$gte":30},"$sort":"-age"}'>
+      <button type="submit">Query</button>
     </form>
   `
 
   const cols = info.columns || []
-  let table = '<p>No rows</p>'
+  const idxCols = info.index || []
+  const keyField = info.key || 'id'
+
+  let table = '<p class="empty">No rows match the query.</p>'
   if (rows.length) {
-    const ths = cols.map(c => `<th>${c}</th>`).join('')
+    const ths = cols.map(c => {
+      let markers = ''
+      if (c === keyField || (Array.isArray(keyField) && keyField.includes(c))) markers += ' 🔑'
+      if (idxCols.includes(c)) markers += ' ⚡'
+      return `<th>${c}${markers}</th>`
+    }).join('') + '<th class="actions-col"></th>'
+
     const trs = rows.map(r => {
-      const tds = cols.map(c => `<td>${esc(r[c])}</td>`).join('')
-      return `<tr>${tds}</tr>`
+      const tds = cols.map(c => {
+        const v = r[c]
+        const display = (typeof v === 'object' && v !== null) ? JSON.stringify(v) : v
+        return `<td>${esc(display)}</td>`
+      }).join('')
+      const idVal = typeof keyField === 'string' ? r[keyField] : null
+      const delBtn = idVal != null
+        ? `<td class="actions-col"><button class="btn-del" data-db="${dbName}" data-coll="${collName}" data-id="${esc(idVal)}">✕</button></td>`
+        : '<td></td>'
+      return `<tr>${tds}${delBtn}</tr>`
     }).join('')
-    table = `<table><tr>${ths}</tr>${trs}</table>`
+
+    table = `<div class="table-wrap"><table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table></div>`
   }
 
-  let pager = '<div class="pager" style="margin-top:12px">'
+  const rowCount = rows.length
+  const showing = rowCount === limit ? `${skip + 1}–${skip + rowCount}+` : rowCount > 0 ? `${skip + 1}–${skip + rowCount}` : '0'
+
+  let pager = `<div class="pager"><span class="muted">Showing ${showing}</span>`
   if (skip > 0) {
     const prev = Math.max(0, skip - limit)
-    pager += `<a href="/admin/${dbName}/${collName}?q=${encodeURIComponent(q)}&skip=${prev}">Prev</a>`
+    pager += ` <a href="/admin/${dbName}/${collName}?q=${encodeURIComponent(q)}&skip=${prev}">← Prev</a>`
   }
-  const hasMore = rows.length === limit
-  if (hasMore) {
-    pager += `<a href="/admin/${dbName}/${collName}?q=${encodeURIComponent(q)}&skip=${skip + limit}">Next</a>`
+  if (rowCount === limit) {
+    pager += ` <a href="/admin/${dbName}/${collName}?q=${encodeURIComponent(q)}&skip=${skip + limit}">Next →</a>`
   }
   pager += '</div>'
 
-  const postForm = `
-    <hr style="margin:24px 0;border:0;border-top:1px solid #ddd">
-    <form id="post-batch-coll-form" data-db="${dbName}" data-coll="${collName}">
-      <h3 style="margin-bottom:8px">Post to <code>${collName}</code></h3>
-      <textarea name="payload" rows="5" placeholder='[{"name":"Bob"}, {"id":5,"name":"Alice"}]'></textarea>
-      <button type="submit">Post</button>
-    </form>
+  const putForm = `
+    <div class="panel">
+      <h3>Insert / Upsert</h3>
+      <form id="put-coll-form" data-db="${dbName}" data-coll="${collName}">
+        <textarea name="payload" rows="3" placeholder='{"id":"new1","name":"Bob","age":25}'></textarea>
+        <button type="submit">PUT</button>
+      </form>
+    </div>
   `
 
-  return nav([{ label: 'admin', href: '/admin' }, { label: dbName, href: `/admin/${dbName}` }, { label: collName }]) +
-    `<h1>${collName}</h1>` + filterForm + table + pager + postForm
+  const schemaInfo = `
+    <div class="panel schema-panel">
+      <h3>Schema</h3>
+      <div class="schema-row"><span class="label">Key:</span> <code>${keyField}</code></div>
+      <div class="schema-row"><span class="label">Columns:</span> <code>${cols.join(', ')}</code></div>
+      <div class="schema-row"><span class="label">Indexes:</span> ${idxCols.length ? idxCols.map(i => badge(i, 'idx')).join(' ') : '<span class="muted">none</span>'}</div>
+      <form id="index-form" data-db="${dbName}" data-coll="${collName}" class="inline-form" style="margin-top:8px">
+        <input name="indexFields" placeholder="col1, col2" value="${idxCols.join(', ')}">
+        <button type="submit">Set Indexes</button>
+      </form>
+    </div>
+  `
+
+  const dangerZone = `
+    <div class="panel danger-panel">
+      <h3>Danger Zone</h3>
+      <div class="danger-actions">
+        <button class="btn-danger" id="truncate-btn" data-db="${dbName}" data-coll="${collName}">Delete All Data</button>
+        <button class="btn-danger" id="drop-btn" data-db="${dbName}" data-coll="${collName}">Drop Collection</button>
+      </div>
+    </div>
+  `
+
+  return crumbs + `
+    <div class="header">
+      <h1>${collName}</h1>
+      ${badge(showing + ' rows', 'muted')}
+    </div>
+    ${filterForm}
+    ${table}
+    ${pager}
+    ${putForm}
+    ${schemaInfo}
+    ${dangerZone}
+  `
 }

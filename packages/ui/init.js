@@ -21,17 +21,16 @@ async function render() {
       const cols = await Api.fetchCollections(r.db)
       Browser.setHtml(app, View.renderCollections(r.db, cols))
     } else {
-      const cols = await Api.fetchCollections(r.db)
-      const data = await Api.fetchQuery(r.db, r.collection, r.q, r.skip, r.limit)
-      const info = cols[r.collection] || { columns: [], index: [] }
-      Browser.setHtml(app, View.renderData(r.db, r.collection, data, info, r.q, r.skip, r.limit))
+      const schema = await Api.fetchSchema(r.db, r.collection)
+      const rows = await Api.fetchQuery(r.db, r.collection, r.q, r.skip, r.limit)
+      Browser.setHtml(app, View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit))
     }
   } catch (err) {
     if (err.message === 'Unauthorized') {
       Api.setToken('')
       Browser.setHtml(app, View.renderLogin('Unauthorized'))
     } else {
-      Browser.setHtml(app, `<h1>Error</h1><p>${err.message}</p><a href="/admin">Back to Admin</a>`)
+      Browser.setHtml(app, `<div class="error-page"><h1>Error</h1><p>${err.message}</p><a href="/admin">← Back</a></div>`)
     }
   }
 }
@@ -42,6 +41,34 @@ Browser.onClick(e => {
   if (a && a.href && a.href.startsWith(Browser.getOrigin() + '/admin')) {
     e.preventDefault()
     Router.navigate(a.href)
+  }
+
+  // Delete single row button
+  if (e.target.classList && e.target.classList.contains('btn-del')) {
+    const db = Browser.getAttr(e.target, 'data-db')
+    const coll = Browser.getAttr(e.target, 'data-coll')
+    const id = Browser.getAttr(e.target, 'data-id')
+    if (confirm(`Delete ${id}?`)) {
+      Api.deleteDocs(db, coll, JSON.stringify({ id })).then(render).catch(err => alert(err.message))
+    }
+  }
+
+  // Truncate button
+  if (e.target.id === 'truncate-btn') {
+    const db = Browser.getAttr(e.target, 'data-db')
+    const coll = Browser.getAttr(e.target, 'data-coll')
+    if (confirm(`Delete ALL data from ${coll}? Schema will be preserved.`)) {
+      Api.deleteDocs(db, coll, '{}').then(render).catch(err => alert(err.message))
+    }
+  }
+
+  // Drop collection button
+  if (e.target.id === 'drop-btn') {
+    const db = Browser.getAttr(e.target, 'data-db')
+    const coll = Browser.getAttr(e.target, 'data-coll')
+    if (confirm(`DROP collection ${coll}? This cannot be undone.`)) {
+      Api.deleteDocs(db, coll, '').then(() => Router.navigate(`/admin/${db}`)).catch(err => alert(err.message))
+    }
   }
 })
 
@@ -60,21 +87,31 @@ Browser.onSubmit(async e => {
     const db = Browser.getAttr(form, 'data-db')
     const coll = Browser.getAttr(form, 'data-coll')
     Router.navigate(`/admin/${db}/${coll}?q=${encodeURIComponent(fd.q)}&skip=0`)
-  } else if (form.id === 'post-batch-db-form') {
+  } else if (form.id === 'put-form') {
     const db = Browser.getAttr(form, 'data-db')
     try {
+      const payload = JSON.parse(fd.payload || '[]')
+      await Api.putDocs(db, fd.collection, payload)
+      Router.navigate(`/admin/${db}/${fd.collection}`)
+    } catch (err) {
+      alert(err.message)
+    }
+  } else if (form.id === 'put-coll-form') {
+    const db = Browser.getAttr(form, 'data-db')
+    const coll = Browser.getAttr(form, 'data-coll')
+    try {
       const payload = JSON.parse(fd.payload || '{}')
-      await Api.postBatch(db, payload)
+      await Api.putDocs(db, coll, payload)
       render()
     } catch (err) {
       alert(err.message)
     }
-  } else if (form.id === 'post-batch-coll-form') {
+  } else if (form.id === 'index-form') {
     const db = Browser.getAttr(form, 'data-db')
     const coll = Browser.getAttr(form, 'data-coll')
     try {
-      const payload = JSON.parse(fd.payload || '[]')
-      await Api.postBatch(db, { [coll]: payload })
+      const fields = fd.indexFields.split(',').map(s => s.trim()).filter(Boolean)
+      await Api.setMeta(db, coll, { index: fields })
       render()
     } catch (err) {
       alert(err.message)

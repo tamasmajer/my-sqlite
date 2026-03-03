@@ -1,35 +1,30 @@
 import * as Sql from './access/sqlite.js'
 
-// Parse JSON filter from query string into SQL SELECT
-// Filter: { age: 50, name: { $gt: 'A' }, $limit: 5, $skip: 10, $sort: '-age' }
-export function execQuery(db, collection, filterStr) {
-  const filter = filterStr ? JSON.parse(decodeURIComponent(filterStr)) : {}
-  const { where, params, limit, skip, sort } = buildQuery(filter)
-
-  let sql = `SELECT * FROM "${collection}"`
-  if (where) sql += ` WHERE ${where}`
-  if (sort) sql += ` ORDER BY ${sort}`
-  if (limit != null) sql += ` LIMIT ${limit}`
-  if (skip != null) sql += ` OFFSET ${skip}`
-
-  return Sql.all(db, sql, params)
+// Parse JSON filter string into SQL components
+// Input: raw query string (JSON), e.g. '{"age":{"$gte":30},"$sort":"-age","$limit":10}'
+// Returns: { where, params, order, limit, offset }
+export function parseFilter(filterStr) {
+  if (!filterStr) return { where: '', params: [], order: '', limit: null, offset: null }
+  const filter = JSON.parse(decodeURIComponent(filterStr))
+  return buildFilter(filter)
 }
 
-function buildQuery(filter) {
+// Build SQL WHERE/ORDER/LIMIT from a filter object
+// Exported for reuse in data.js
+export function buildFilter(filter) {
   const params = []
   const conditions = []
   let limit = null
-  let skip = null
-  let sort = null
+  let offset = null
+  let order = ''
 
   for (const key of Object.keys(filter)) {
     if (key === '$limit') { limit = filter[key]; continue }
-    if (key === '$skip') { skip = filter[key]; continue }
-    if (key === '$sort') { sort = parseSortValue(filter[key]); continue }
+    if (key === '$skip') { offset = filter[key]; continue }
+    if (key === '$sort') { order = parseSortValue(filter[key]); continue }
 
     const val = filter[key]
     if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
-      // operator object: { $gt: 50, $lt: 100 }
       for (const op of Object.keys(val)) {
         const { sql, param } = opToSql(key, op, val[op])
         conditions.push(sql)
@@ -39,7 +34,6 @@ function buildQuery(filter) {
         }
       }
     } else {
-      // equality
       conditions.push(`"${key}" = ?`)
       params.push(val)
     }
@@ -48,10 +42,23 @@ function buildQuery(filter) {
   return {
     where: conditions.length ? conditions.join(' AND ') : '',
     params,
+    order,
     limit,
-    skip,
-    sort,
+    offset,
   }
+}
+
+// Execute a query on a collection using a parsed filter
+export function exec(db, collection, filterStr) {
+  const { where, params, order, limit, offset } = parseFilter(filterStr)
+
+  let sql = `SELECT * FROM "${collection}"`
+  if (where) sql += ` WHERE ${where}`
+  if (order) sql += ` ORDER BY ${order}`
+  if (limit != null) sql += ` LIMIT ${limit}`
+  if (offset != null) sql += ` OFFSET ${offset}`
+
+  return Sql.all(db, sql, params)
 }
 
 const OPS = {
@@ -81,7 +88,6 @@ function opToSql(field, op, value) {
 }
 
 function parseSortValue(val) {
-  // "-age" → age DESC, "name" → name ASC
   const parts = Array.isArray(val) ? val : [val]
   return parts.map(s => {
     if (s.startsWith('-')) return `"${s.slice(1)}" DESC`

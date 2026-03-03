@@ -1,21 +1,114 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui, sans-serif; padding: 20px; max-width: 960px; margin: 0 auto; color: #333; }
-h1 { margin-bottom: 16px; }
-h3 { margin-bottom: 8px; }
-a { color: #0066cc; text-decoration: none; cursor: pointer; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  padding: 24px 32px;
+  max-width: 1100px;
+  margin: 0 auto;
+  color: #1a1a2e;
+  background: #f8f9fb;
+  line-height: 1.5;
+}
+
+h1 { font-size: 1.5rem; font-weight: 600; }
+h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
+
+a { color: #2563eb; text-decoration: none; cursor: pointer; }
 a:hover { text-decoration: underline; }
-ul { list-style-position: inside; margin: 12px 0; }
-li { margin-bottom: 6px; }
-table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-th, td { text-align: left; padding: 8px 10px; border: 1px solid #ddd; }
-th { background: #f5f5f5; }
-tr:hover { background: #fafafa; }
-button { cursor: pointer; padding: 6px 16px; margin: 4px 0; }
-input, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; }
-hr { margin: 24px 0; border: 0; border-top: 1px solid #ddd; }
-.nav { margin-bottom: 16px; font-size: 14px; color: #666; }
-.nav span { margin-right: 8px; }
-.nav a { margin-right: 8px; }
-.flex { display: flex; gap: 8px; align-items: stretch; }
-.pager { margin: 12px 0; font-size: 14px; }
-.pager a { margin-right: 12px; }
+
+code { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 0.85em; background: #eef1f6; padding: 1px 5px; border-radius: 3px; }
+
+/* Breadcrumb */
+.breadcrumb { margin-bottom: 20px; font-size: 13px; }
+.breadcrumb .sep { color: #aaa; margin: 0 4px; }
+.breadcrumb .current { color: #555; font-weight: 500; }
+
+/* Header */
+.header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 20px; }
+
+/* Badges */
+.badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+.badge.muted { background: #e8ebf0; color: #666; }
+.badge.idx { background: #dbeafe; color: #1e40af; font-family: monospace; font-size: 11px; }
+
+/* Cards (databases) */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 20px 12px; background: #fff; border: 1px solid #e2e5ea; border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s; text-decoration: none !important; color: inherit;
+}
+.card:hover { border-color: #2563eb; box-shadow: 0 2px 8px rgba(37,99,235,0.1); }
+.card-icon { font-size: 28px; margin-bottom: 6px; }
+.card-label { font-size: 14px; font-weight: 500; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; margin: 12px 0; background: #fff; border-radius: 6px; overflow: hidden; border: 1px solid #e2e5ea; }
+thead th { background: #f1f3f7; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: #555; padding: 8px 12px; border-bottom: 2px solid #e2e5ea; }
+td { padding: 7px 12px; border-bottom: 1px solid #eee; font-size: 13px; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tbody tr:hover { background: #f8faff; }
+.mono { font-family: monospace; font-size: 12px; }
+.actions-col { width: 36px; text-align: center; }
+
+/* Buttons */
+button {
+  cursor: pointer; padding: 6px 16px; border: 1px solid #d1d5db; background: #fff;
+  border-radius: 5px; font-size: 13px; font-weight: 500; transition: all 0.12s;
+}
+button:hover { background: #f3f4f6; border-color: #b0b5bf; }
+button[type="submit"] { background: #2563eb; color: #fff; border-color: #2563eb; }
+button[type="submit"]:hover { background: #1d4ed8; }
+
+.btn-del { background: none; border: none; color: #aaa; font-size: 14px; padding: 2px 6px; cursor: pointer; border-radius: 3px; }
+.btn-del:hover { background: #fee2e2; color: #dc2626; }
+
+.btn-danger { background: #fff; color: #dc2626; border: 1px solid #fca5a5; padding: 6px 14px; }
+.btn-danger:hover { background: #fef2f2; border-color: #dc2626; }
+
+/* Forms */
+input, textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 5px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px;
+  background: #fff; transition: border-color 0.15s;
+}
+input:focus, textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+textarea { resize: vertical; }
+
+.inline-form { display: flex; gap: 8px; align-items: stretch; }
+
+.filter-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+.filter-bar input { flex: 1; }
+
+/* Panels */
+.panel {
+  margin-top: 24px; padding: 16px 20px; background: #fff;
+  border: 1px solid #e2e5ea; border-radius: 8px;
+}
+
+.schema-panel .schema-row { margin-bottom: 4px; font-size: 13px; }
+.schema-panel .label { color: #666; font-weight: 500; display: inline-block; min-width: 70px; }
+
+.danger-panel { border-color: #fca5a5; }
+.danger-panel h3 { color: #dc2626; }
+.danger-actions { display: flex; gap: 8px; }
+
+/* Pager */
+.pager { margin: 12px 0; font-size: 13px; display: flex; align-items: center; gap: 12px; }
+
+/* Login */
+.login-card {
+  max-width: 360px; margin: 80px auto; padding: 32px;
+  background: #fff; border: 1px solid #e2e5ea; border-radius: 12px; text-align: center;
+}
+.login-card h1 { font-size: 1.6rem; margin-bottom: 4px; }
+.login-card .subtitle { color: #888; margin-bottom: 20px; font-size: 14px; }
+.login-card form { display: flex; flex-direction: column; gap: 10px; }
+.login-card input { text-align: center; }
+
+.error-msg { color: #dc2626; background: #fef2f2; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+.error-page { text-align: center; margin-top: 60px; }
+.error-page h1 { color: #dc2626; margin-bottom: 8px; }
+
+.empty { color: #888; font-size: 14px; margin: 16px 0; }
+.muted { color: #888; }

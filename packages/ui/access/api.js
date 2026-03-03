@@ -39,10 +39,35 @@ export async function fetchQuery(dbName, collection, filterStr, skip = 0, limit 
   return request(`/api/${dbName}/${collection}${qs}`)
 }
 
-export async function postBatch(dbName, payload) {
-  return request(`/api/${dbName}`, {
-    method: 'POST',
+export async function fetchSchema(dbName, collection) {
+  return request(`/api/${dbName}/${collection}`, { method: 'OPTIONS' })
+}
+
+export async function putDocs(dbName, collection, docs) {
+  return request(`/api/${dbName}/${collection}`, {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(docs)
+  })
+}
+
+export async function patchDoc(dbName, collection, doc) {
+  return request(`/api/${dbName}/${collection}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(doc)
+  })
+}
+
+export async function deleteDocs(dbName, collection, filterStr) {
+  const qs = filterStr ? '?' + encodeURIComponent(filterStr) : ''
+  return request(`/api/${dbName}/${collection}${qs}`, { method: 'DELETE' })
+}
+
+export async function setMeta(dbName, collection, meta) {
+  return request(`/api/${dbName}/${collection}`, {
+    method: 'OPTIONS',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(meta)
   })
 }

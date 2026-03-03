@@ -1,6 +1,5 @@
 import * as Schema from './schema.js'
 import * as Data from './data.js'
-import * as Query from './query.js'
 import * as Auth from './auth.js'
 import * as Fs from './access/fs.js'
 
@@ -29,69 +28,109 @@ export function route(req, res, config) {
 // --- API ---
 
 function handleApi(req, res, config, url) {
-  const parts = url.pathname.replace('/api/', '').split('/').filter(Boolean)
+  const parts = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean)
   const dbName = parts[0]
   const collection = parts[1]
+  const method = req.method
+  const filterStr = url.search ? url.search.slice(1) : ''
 
-  if (!dbName) {
-    if (req.method === 'GET') json(res, 200, Fs.listFiles(config.datadir, '.sqlite'))
-    else json(res, 400, { ok: 0, error: 'Missing database name' })
+  try {
+    // /api — list databases
+    if (!dbName) {
+      if (method === 'GET') json(res, 200, Fs.listFiles(config.datadir, '.sqlite'))
+      else json(res, 405, { ok: 0, error: 'Method not allowed' })
+      return
+    }
+
+    // /api/:db — list collections
+    if (!collection) {
+      if (method === 'GET') {
+        const db = Schema.openDb(config.datadir, dbName)
+        json(res, 200, Schema.listCollections(db))
+      } else {
+        json(res, 405, { ok: 0, error: 'Method not allowed' })
+      }
+      return
+    }
+
+    // /api/:db/:coll — document operations
+    handleCollection(req, res, config, dbName, collection, method, filterStr)
+  } catch (err) {
+    json(res, 500, { ok: 0, error: err.message })
+  }
+}
+
+function handleCollection(req, res, config, dbName, collection, method, filterStr) {
+  if (method === 'GET') {
+    const db = Schema.openDb(config.datadir, dbName)
+    const rows = Data.query(db, collection, filterStr)
+    json(res, 200, Data.fromSqlRows(rows))
     return
   }
 
-  if (req.method === 'GET') {
-    try {
-      handleGet(res, config, dbName, collection, url.search?.slice(1))
-    } catch (err) {
-      json(res, 500, { ok: 0, error: err.message })
+  if (method === 'DELETE') {
+    const db = Schema.openDb(config.datadir, dbName)
+    if (!filterStr) {
+      // No query string = drop collection
+      Schema.dropCollection(db, collection)
+      if (Schema.isDbEmpty(db)) Schema.dropDb(config.datadir, dbName)
+      json(res, 200, { ok: 1, dropped: true })
+    } else {
+      Data.remove(db, collection, filterStr)
+      json(res, 200, { ok: 1 })
     }
-  } else if (req.method === 'POST') {
+    return
+  }
+
+  if (method === 'PUT') {
     readBody(req, body => {
       try {
-        handlePost(res, config, dbName, body)
+        const db = Schema.openDb(config.datadir, dbName)
+        json(res, 200, Data.upsert(db, collection, body))
       } catch (err) {
         json(res, 500, { ok: 0, error: err.message })
       }
     })
-  } else {
-    json(res, 405, { ok: 0, error: 'Method not allowed' })
-  }
-}
-
-function handleGet(res, config, dbName, collection, queryStr) {
-  const db = Schema.openDb(config.datadir, dbName)
-  if (!collection) {
-    json(res, 200, Schema.listCollections(db))
     return
   }
-  const rows = Query.execQuery(db, collection, queryStr)
-  json(res, 200, { [collection]: rows })
-}
 
-function handlePost(res, config, dbName, body) {
-  const db = Schema.openDb(config.datadir, dbName)
-  const results = {}
-
-  for (const [name, payload] of Object.entries(body)) {
-    if (payload === null) {
-      Schema.dropCollection(db, name)
-      results[name] = { dropped: true }
-    } else if (Array.isArray(payload)) {
-      results[name] = Data.processBatch(db, name, payload)
-    } else if (typeof payload === 'object') {
-      if (payload.index) {
-        const tables = Schema.listCollections(db)
-        if (!tables[name]) {
-          results[name] = { ok: 0, error: 'Collection does not exist. Insert data first.' }
-          continue
-        }
-        Schema.setIndexes(db, name, payload.index)
+  if (method === 'PATCH') {
+    readBody(req, body => {
+      try {
+        const db = Schema.openDb(config.datadir, dbName)
+        json(res, 200, Data.patch(db, collection, body))
+      } catch (err) {
+        json(res, 500, { ok: 0, error: err.message })
       }
-      results[name] = { ok: 1 }
-    }
+    })
+    return
   }
 
-  json(res, 200, results)
+  if (method === 'OPTIONS') {
+    // Handle CORS preflight
+    if (req.headers['access-control-request-method']) {
+      res.writeHead(204, corsHeaders())
+      res.end()
+      return
+    }
+    const db = Schema.openDb(config.datadir, dbName)
+    const ct = req.headers['content-type'] || ''
+    if (ct.includes('json')) {
+      readBody(req, body => {
+        try {
+          Schema.setMeta(db, collection, body)
+          json(res, 200, Schema.getMeta(db, collection))
+        } catch (err) {
+          json(res, 500, { ok: 0, error: err.message })
+        }
+      })
+    } else {
+      json(res, 200, Schema.getMeta(db, collection))
+    }
+    return
+  }
+
+  json(res, 405, { ok: 0, error: 'Method not allowed' })
 }
 
 // --- Admin ---
@@ -131,13 +170,20 @@ function readBody(req, cb) {
     if (ct.includes('json')) {
       cb(JSON.parse(data))
     } else {
-      // form-encoded
       cb(Object.fromEntries(new URLSearchParams(data)))
     }
   })
 }
 
 function json(res, status, data) {
-  res.writeHead(status, { 'content-type': 'application/json' })
+  res.writeHead(status, { 'content-type': 'application/json', ...corsHeaders() })
   res.end(JSON.stringify(data))
+}
+
+function corsHeaders() {
+  return {
+    'access-control-allow-origin': '*',
+    'access-control-allow-methods': 'GET, PUT, PATCH, DELETE, OPTIONS',
+    'access-control-allow-headers': 'content-type, authorization',
+  }
 }
