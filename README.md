@@ -216,3 +216,45 @@ Tested over HTTPS from a remote client against a minimal VPS:
 | 200 concurrent schema mutations | 1,238ms | 0 |
 
 Zero errors across all tests. SQLite concurrency is safe because better-sqlite3 is synchronous and Node.js is single-threaded — writes are effectively serialized. The main bottleneck is network latency; batch calls are the best way to improve throughput.
+
+## Coding Conventions
+
+This project uses **Flat JS** — JavaScript without classes, `this`, or method calls on objects. Every function call in the codebase looks like `Module.function(data)`, so you can always tell where a function is defined just by reading the call site.
+
+```js
+import * as Schema from './schema.js'
+import * as Data from './data.js'
+
+// ✓ Flat: Module.function() — you know exactly where to find these
+Schema.openDb(datadir, name)
+Data.upsert(db, coll, docs)
+
+// ✗ Not flat: obj.method() — which class? which prototype? which override?
+db.prepare(sql).run(params)
+```
+
+State is plain objects passed as arguments, not instances with methods. External dependencies (SQLite, fs, DOM) are wrapped in thin `access/*.js` facade modules so business logic never imports npm or Node directly.
+
+### Project structure
+
+```
+packages/
+  server/          HTTP server + SQLite engine
+    src/
+      server.js      Entry point, CLI flags
+      router.js      HTTP routing, request dispatch
+      schema.js      DB/table lifecycle, indexes, metadata
+      data.js        CRUD operations (upsert, query, patch, remove)
+      query.js       MongoDB-style query → SQL compiler
+      auth.js        Token authentication
+      access/        Facades (sqlite, fs, http, crypto)
+  client/          JS client library
+    src/
+      client.js      get, put, patch, del, post, options
+      access/        Facades (fetch)
+  ui/              Admin web UI (SPA)
+    init.js          Entry point, event delegation
+    view.js          HTML rendering (pure functions)
+    router.js        Client-side URL state
+    access/          Facades (api, browser)
+```
