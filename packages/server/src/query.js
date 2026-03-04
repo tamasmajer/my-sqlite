@@ -1,3 +1,4 @@
+// Query — MongoDB-style JSON filter to SQL compiler
 import * as Sql from './access/sqlite.js'
 
 // Parse JSON filter string into SQL components

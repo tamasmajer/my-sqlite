@@ -1,3 +1,4 @@
+// Router — HTTP request dispatch for API, admin UI, and static files
 import * as Schema from './schema.js'
 import * as Data from './data.js'
 import * as Auth from './auth.js'

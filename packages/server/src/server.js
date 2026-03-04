@@ -1,3 +1,4 @@
+// Server — entry point, CLI flags, starts HTTP/HTTPS listener
 import * as Http from './access/http.js'
 import * as Sql from './access/sqlite.js'
 import * as Fs from './access/fs.js'

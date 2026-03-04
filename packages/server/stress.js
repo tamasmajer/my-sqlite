@@ -1,3 +1,4 @@
+// Stress test — sequential and concurrent throughput benchmarks
 const BASE = process.argv[2] || 'http://localhost:3001'
 const TOKEN = process.argv[3] || ''
 const DB = 'stressdb'

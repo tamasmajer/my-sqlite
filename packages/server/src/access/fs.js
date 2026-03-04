@@ -1,3 +1,4 @@
+// Filesystem facade — wraps node:fs for file and directory operations
 import { existsSync, mkdirSync, readdirSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 

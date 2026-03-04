@@ -1,3 +1,4 @@
+// Client — JS API for my-sqlite (get, put, patch, del, post, options)
 import * as Fetch from './access/fetch.js'
 
 const connectionCache = new Map()

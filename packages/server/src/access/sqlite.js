@@ -1,3 +1,4 @@
+// SQLite facade — wraps better-sqlite3 for database operations
 import Database from 'better-sqlite3'
 
 const dbs = new Map()

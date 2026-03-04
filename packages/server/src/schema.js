@@ -1,3 +1,4 @@
+// Schema — database and table lifecycle, indexes, metadata
 import * as Sql from './access/sqlite.js'
 import * as Fs from './access/fs.js'
 import { join } from 'node:path'

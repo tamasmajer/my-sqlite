@@ -1,3 +1,4 @@
+// Test — integration tests for the API via the client library
 import * as Db from '../client/src/client.js'
 
 const db = 'localhost:3001/api/testdb2'

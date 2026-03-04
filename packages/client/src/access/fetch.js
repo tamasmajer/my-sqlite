@@ -1,3 +1,4 @@
+// Fetch facade — HTTP methods returning parsed JSON
 export async function getJson(url, headers = {}) {
   const res = await fetch(url, { headers })
   return res.json()

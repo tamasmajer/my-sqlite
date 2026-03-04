@@ -1,3 +1,4 @@
+// Stop — kills a running server by its PID file
 import * as Fs from './access/fs.js'
 import { join } from 'node:path'
 

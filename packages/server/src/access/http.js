@@ -1,3 +1,4 @@
+// HTTP facade — wraps node:http and node:https server creation
 import { createServer } from 'node:http'
 import { createServer as createTlsServer } from 'node:https'
 import { readFileSync } from 'node:fs'
