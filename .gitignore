@@ -3,3 +3,4 @@ data
 dev
 *.pem
 .env*
+!.env.example
