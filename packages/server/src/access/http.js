@@ -3,6 +3,17 @@ import { createServer } from 'node:http'
 import { createServer as createTlsServer } from 'node:https'
 import { readFileSync } from 'node:fs'
 
+export function readBody(req, cb) {
+  let data = ''
+  req.on('data', chunk => { data += chunk })
+  req.on('end', () => cb(data))
+}
+
+export function respond(res, status, headers, body) {
+  res.writeHead(status, headers)
+  res.end(body)
+}
+
 export function listen(opts, handler) {
   const { port, host, tls, cert, key } = opts
   const server = tls

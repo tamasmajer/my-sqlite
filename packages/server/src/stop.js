@@ -1,11 +1,10 @@
 // Stop — kills a running server by its PID file
 import * as Fs from './access/fs.js'
-import { join } from 'node:path'
 
 const args = process.argv.slice(2)
 const i = args.indexOf('--datadir')
 const datadir = i !== -1 ? args[i + 1] : './data'
-const pidFile = join(datadir, '.pid')
+const pidFile = Fs.joinPath(datadir, '.pid')
 
 if (!Fs.exists(pidFile)) {
   console.log('No running server found')

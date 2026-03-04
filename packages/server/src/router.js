@@ -3,6 +3,7 @@ import * as Schema from './schema.js'
 import * as Data from './data.js'
 import * as Auth from './auth.js'
 import * as Sql from './access/sqlite.js'
+import * as Http from './access/http.js'
 import * as Fs from './access/fs.js'
 
 export function route(req, res, config) {
@@ -11,8 +12,7 @@ export function route(req, res, config) {
 
   // CORS preflight — must respond before auth check
   if (req.method === 'OPTIONS' && req.headers['access-control-request-method']) {
-    res.writeHead(204, corsHeaders())
-    res.end()
+    Http.respond(res, 204, corsHeaders(), '')
     return
   }
 
@@ -30,8 +30,7 @@ export function route(req, res, config) {
     return
   }
 
-  res.writeHead(404)
-  res.end('not found')
+  Http.respond(res, 404, {}, 'not found')
 }
 
 // --- API ---
@@ -193,32 +192,27 @@ function handleAdmin(req, res, config, url) {
   try {
     const data = Fs.readFile(filePath)
     const mime = ext === 'js' ? 'text/javascript' : ext === 'css' ? 'text/css' : 'text/html'
-    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' })
-    res.end(data)
+    Http.respond(res, 200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' }, data)
   } catch (e) {
-    res.writeHead(404)
-    res.end('not found')
+    Http.respond(res, 404, {}, 'not found')
   }
 }
 
 // --- Helpers ---
 
 function readBody(req, cb) {
-  let data = ''
-  req.on('data', chunk => { data += chunk })
-  req.on('end', () => {
+  Http.readBody(req, raw => {
     const ct = req.headers['content-type'] || ''
     if (ct.includes('json')) {
-      cb(JSON.parse(data))
+      cb(JSON.parse(raw))
     } else {
-      cb(Object.fromEntries(new URLSearchParams(data)))
+      cb(Object.fromEntries(new URLSearchParams(raw)))
     }
   })
 }
 
 function json(res, status, data) {
-  res.writeHead(status, { 'content-type': 'application/json', ...corsHeaders() })
-  res.end(JSON.stringify(data))
+  Http.respond(res, status, { 'content-type': 'application/json', ...corsHeaders() }, JSON.stringify(data))
 }
 
 function parseServersFlag(val) {

@@ -13,25 +13,24 @@ function page(app, content) {
 let _pop = null
 function showPopover(td) {
   if (!_pop) {
-    _pop = document.createElement('div')
-    _pop.className = 'cell-popover'
-    document.body.appendChild(_pop)
+    _pop = Browser.createElement('div', 'cell-popover')
+    Browser.appendToBody(_pop)
   }
-  _pop.textContent = td.dataset.copy
-  _pop.style.display = 'block'
-  const r = td.getBoundingClientRect()
-  _pop.style.left = Math.min(r.left, window.innerWidth - 520) + 'px'
-  const below = window.innerHeight - r.bottom
+  Browser.setText(_pop, Browser.getDataAttr(td, 'copy'))
+  Browser.setStyle(_pop, 'display', 'block')
+  const r = Browser.getRect(td)
+  Browser.setStyle(_pop, 'left', Math.min(r.left, Browser.innerWidth() - 520) + 'px')
+  const below = Browser.innerHeight() - r.bottom
   if (below > 100 || below > r.top) {
-    _pop.style.top = (r.bottom + 6) + 'px'
-    _pop.style.bottom = 'auto'
+    Browser.setStyle(_pop, 'top', (r.bottom + 6) + 'px')
+    Browser.setStyle(_pop, 'bottom', 'auto')
   } else {
-    _pop.style.bottom = (window.innerHeight - r.top + 6) + 'px'
-    _pop.style.top = 'auto'
+    Browser.setStyle(_pop, 'bottom', (Browser.innerHeight() - r.top + 6) + 'px')
+    Browser.setStyle(_pop, 'top', 'auto')
   }
 }
-function hidePopover() { if (_pop) _pop.style.display = 'none' }
-document.addEventListener('keydown', e => { if (e.key === 'Escape') hidePopover() })
+function hidePopover() { if (_pop) Browser.setStyle(_pop, 'display', 'none') }
+Browser.onKeydown(e => { if (e.key === 'Escape') hidePopover() })
 
 async function render() {
   const app = Browser.getById('app')
@@ -67,7 +66,7 @@ async function render() {
 // Global click delegation for SPA links
 Browser.onClick(e => {
   // Hide popover on any outside click
-  if (_pop && !_pop.contains(e.target)) hidePopover()
+  if (_pop && !Browser.contains(_pop, e.target)) hidePopover()
 
   // Click on data cell — show popover with full value
   const td = Browser.closest(e.target, 'td[data-copy]')
@@ -92,7 +91,7 @@ Browser.onClick(e => {
   }
 
   // Remove server
-  if (e.target.classList && e.target.classList.contains('server-remove')) {
+  if (Browser.hasClass(e.target, 'server-remove')) {
     const url = Browser.getAttr(e.target, 'data-server')
     Api.removeServer(url)
     render()
@@ -108,7 +107,7 @@ Browser.onClick(e => {
   }
 
   // Delete single row button
-  if (e.target.classList && e.target.classList.contains('btn-del')) {
+  if (Browser.hasClass(e.target, 'btn-del')) {
     const db = Browser.getAttr(e.target, 'data-db')
     const coll = Browser.getAttr(e.target, 'data-coll')
     const id = Browser.getAttr(e.target, 'data-id')

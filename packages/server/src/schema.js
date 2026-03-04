@@ -1,11 +1,10 @@
 // Schema — database and table lifecycle, indexes, metadata
 import * as Sql from './access/sqlite.js'
 import * as Fs from './access/fs.js'
-import { join } from 'node:path'
 
 export function openDb(datadir, name) {
   Fs.ensureDir(datadir)
-  const path = join(datadir, name + '.sqlite')
+  const path = Fs.joinPath(datadir, name + '.sqlite')
   return Sql.open(path)
 }
 
@@ -131,7 +130,7 @@ export function dropCollection(db, collection) {
 }
 
 export function dropDb(datadir, name) {
-  const base = join(datadir, name + '.sqlite')
+  const base = Fs.joinPath(datadir, name + '.sqlite')
   // Close cached connection if open
   const db = Sql.open(base)
   Sql.close(db)
