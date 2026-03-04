@@ -179,7 +179,28 @@ curl -H 'Authorization: Bearer my-secret-token' \
   'https://myserver.com/api/mydb/users?{"age":{"$gte":25}}'
 ```
 
-For remote access over the internet, enable TLS with `--tls on --cert cert.pem --key key.pem`. Without TLS the token is sent in plaintext — only use unencrypted connections on trusted networks or localhost.
+### TLS Setup
+
+For remote access over the internet, enable TLS. Without it the token is sent in plaintext.
+
+**Self-signed certificate** (for private servers / development):
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout key.pem -out cert.pem -days 365 \
+  -subj '/CN=my-sqlite' \
+  -addext 'subjectAltName=IP:YOUR_SERVER_IP'
+```
+Replace `YOUR_SERVER_IP` with the actual IP. The `-addext` line is needed for browsers to accept the cert when accessing by IP. On first visit you'll need to accept the self-signed cert in your browser.
+
+**Start with TLS:**
+```bash
+node packages/server/src/server.js \
+  --port 9443 --host 0.0.0.0 --tls on \
+  --cert cert.pem --key key.pem \
+  --token $(openssl rand -hex 24)
+```
+
+For production, use a proper certificate from Let's Encrypt or your CA instead of self-signed.
 
 ## Stress Test Results
 
