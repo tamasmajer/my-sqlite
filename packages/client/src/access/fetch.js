@@ -1,7 +1,14 @@
 // Fetch facade — HTTP methods returning parsed JSON
+
+async function jsonOrThrow(res) {
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || res.statusText)
+  return data
+}
+
 export async function getJson(url, headers = {}) {
   const res = await fetch(url, { headers })
-  return res.json()
+  return jsonOrThrow(res)
 }
 
 export async function putJson(url, body, headers = {}) {
@@ -10,7 +17,7 @@ export async function putJson(url, body, headers = {}) {
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
-  return res.json()
+  return jsonOrThrow(res)
 }
 
 export async function postJson(url, body, headers = {}) {
@@ -19,7 +26,7 @@ export async function postJson(url, body, headers = {}) {
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
-  return res.json()
+  return jsonOrThrow(res)
 }
 
 export async function patchJson(url, body, headers = {}) {
@@ -28,12 +35,12 @@ export async function patchJson(url, body, headers = {}) {
     headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
   })
-  return res.json()
+  return jsonOrThrow(res)
 }
 
 export async function deleteWithQuery(url, headers = {}) {
   const res = await fetch(url, { method: 'DELETE', headers })
-  return res.json()
+  return jsonOrThrow(res)
 }
 
 export async function optionsJson(url, body, headers = {}) {
@@ -43,5 +50,5 @@ export async function optionsJson(url, body, headers = {}) {
     opts.body = JSON.stringify(body)
   }
   const res = await fetch(url, opts)
-  return res.json()
+  return jsonOrThrow(res)
 }
