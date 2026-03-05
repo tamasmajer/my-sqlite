@@ -57,13 +57,14 @@ Pass a JSON filter object to `Db.get`. Fields and operators work like MongoDB:
 ```js
 await Db.get(users, 'u1')                                                       // by id
 await Db.get(users, { role: 'admin', $sort: { createdAt: -1 }, $limit: 10 })   // filter
+await Db.get(users, { age: { $gte: 25 }, $count: true })                      // → { count: 42 }
 ```
 
 Supported operators:
 - **Comparison:** `$gt`, `$lt`, `$gte`, `$lte`, `$ne`
 - **Array:** `$in`, `$nin`
 - **String:** `$like`
-- **Modifiers:** `$sort` (object, e.g. `{ age: -1 }` for DESC), `$limit`, `$skip`
+- **Modifiers:** `$sort` (object, e.g. `{ age: -1 }` for DESC), `$limit`, `$skip`, `$count`
 
 ### Inserting and Updating
 

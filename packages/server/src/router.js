@@ -1,6 +1,7 @@
 // Router — HTTP request dispatch for API, admin UI, and static files
 import * as Schema from './schema.js'
 import * as Data from './data.js'
+import * as Query from './query.js'
 import * as Auth from './auth.js'
 import * as Sql from './access/sqlite.js'
 import * as Http from './access/http.js'
@@ -101,7 +102,14 @@ function handleApi(req, res, config, url) {
 function handleCollection(req, res, config, dbName, collection, method, filterStr) {
   if (method === 'GET') {
     const db = Schema.openDb(config.datadir, dbName)
-    if (!Schema.tableExists(db, collection)) { json(res, 200, []); return }
+    if (!Schema.tableExists(db, collection)) {
+      json(res, 200, Query.isCount(filterStr) ? { count: 0 } : [])
+      return
+    }
+    if (Query.isCount(filterStr)) {
+      json(res, 200, Query.count(db, collection, filterStr))
+      return
+    }
     const rows = Data.query(db, collection, filterStr)
     const jsonCols = Schema.jsonColumns(db, collection)
     json(res, 200, Data.fromSqlRows(rows, jsonCols))

@@ -158,7 +158,7 @@ function renderPutForm(dbName) {
   `
 }
 
-export function renderData(dbName, collName, rows, info, q, skip, limit) {
+export function renderData(dbName, collName, rows, info, q, skip, limit, totalCount) {
   const crumbs = nav([
     { label: 'admin', href: '/admin' },
     { label: dbName, href: `/admin/${dbName}` },
@@ -213,14 +213,16 @@ export function renderData(dbName, collName, rows, info, q, skip, limit) {
   }
 
   const rowCount = rows.length
-  const showing = rowCount === limit ? `${skip + 1}–${skip + rowCount}+` : rowCount > 0 ? `${skip + 1}–${skip + rowCount}` : '0'
+  const total = totalCount != null ? totalCount : 0
+  const rangeEnd = skip + rowCount
+  const showing = rowCount > 0 ? `${skip + 1}–${rangeEnd} of ${total}` : `0 of ${total}`
 
   let pager = `<div class="pager"><span class="muted">Showing ${showing}</span>`
   if (skip > 0) {
     const prev = Math.max(0, skip - limit)
     pager += ` <a href="/admin/${dbName}/${collName}?q=${encodeURIComponent(q)}&skip=${prev}">← Prev</a>`
   }
-  if (rowCount === limit) {
+  if (rangeEnd < total) {
     pager += ` <a href="/admin/${dbName}/${collName}?q=${encodeURIComponent(q)}&skip=${skip + limit}">Next →</a>`
   }
   pager += '</div>'
@@ -261,7 +263,7 @@ export function renderData(dbName, collName, rows, info, q, skip, limit) {
   return crumbs + `
     <div class="header">
       <h1>${collName}</h1>
-      ${badge(showing + ' rows', 'muted')}
+      ${badge(total + ' rows', 'muted')}
     </div>
     ${filterForm}
     ${table}

@@ -23,6 +23,7 @@ export function buildFilter(filter) {
     if (key === '$limit') { limit = filter[key]; continue }
     if (key === '$skip') { offset = filter[key]; continue }
     if (key === '$sort') { order = parseSortValue(filter[key]); continue }
+    if (key === '$count') { continue }
 
     const val = filter[key]
     if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
@@ -60,6 +61,25 @@ export function exec(db, collection, filterStr) {
   if (offset != null) sql += ` OFFSET ${offset}`
 
   return Sql.all(db, sql, params)
+}
+
+// Execute a count query on a collection using a parsed filter
+export function count(db, collection, filterStr) {
+  const { where, params } = parseFilter(filterStr)
+
+  let sql = `SELECT COUNT(*) as count FROM "${collection}"`
+  if (where) sql += ` WHERE ${where}`
+
+  return Sql.get(db, sql, params)
+}
+
+// Check if filter has $count flag
+export function isCount(filterStr) {
+  if (!filterStr) return false
+  try {
+    const filter = JSON.parse(decodeURIComponent(filterStr))
+    return filter.$count === true
+  } catch { return false }
 }
 
 const OPS = {

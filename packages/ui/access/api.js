@@ -91,6 +91,13 @@ export async function fetchQuery(dbName, collection, filterStr, skip = 0, limit 
   return request(`/api/${dbName}/${collection}${qs}`)
 }
 
+export async function fetchCount(dbName, collection, filterStr) {
+  const filter = filterStr ? JSON.parse(filterStr) : {}
+  filter.$count = true
+  const qs = '?' + encodeURIComponent(JSON.stringify(filter))
+  return request(`/api/${dbName}/${collection}${qs}`)
+}
+
 export async function fetchSchema(dbName, collection) {
   return request(`/api/${dbName}/${collection}`, { method: 'OPTIONS' })
 }

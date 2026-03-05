@@ -49,9 +49,12 @@ async function render() {
       const cols = await Api.fetchCollections(r.db)
       page(app, View.renderCollections(r.db, cols))
     } else {
-      const schema = await Api.fetchSchema(r.db, r.collection)
-      const rows = await Api.fetchQuery(r.db, r.collection, r.q, r.skip, r.limit)
-      page(app, View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit))
+      const [schema, rows, total] = await Promise.all([
+        Api.fetchSchema(r.db, r.collection),
+        Api.fetchQuery(r.db, r.collection, r.q, r.skip, r.limit),
+        Api.fetchCount(r.db, r.collection, r.q),
+      ])
+      page(app, View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit, total.count))
     }
   } catch (err) {
     if (err.message === 'Unauthorized') {
