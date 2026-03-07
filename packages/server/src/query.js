@@ -5,7 +5,7 @@ import * as Sql from './access/sqlite.js'
 // Input: raw query string (JSON), e.g. '{"age":{"$gte":30},"$sort":{"age":-1},"$limit":10}'
 // Returns: { where, params, order, limit, offset }
 export function parseFilter(filterStr) {
-  if (!filterStr) return { where: '', params: [], order: '', limit: null, offset: null }
+  if (!filterStr) return { where: '', params: [], order: '', limit: null, offset: null, search: null }
   const filter = JSON.parse(decodeURIComponent(filterStr))
   return buildFilter(filter)
 }
@@ -18,20 +18,14 @@ export function buildFilter(filter) {
   let limit = null
   let offset = null
   let order = ''
+  let search = null
 
   for (const key of Object.keys(filter)) {
     if (key === '$limit') { limit = filter[key]; continue }
     if (key === '$skip') { offset = filter[key]; continue }
     if (key === '$sort') { order = parseSortValue(filter[key]); continue }
     if (key === '$count') { continue }
-    if (key === '$search') {
-      const { fields, terms } = filter[key]
-      for (const term of terms) {
-        const orClauses = fields.map(f => { params.push(`%${term}%`); return `"${f}" LIKE ?` })
-        conditions.push(`(${orClauses.join(' OR ')})`)
-      }
-      continue
-    }
+    if (key === '$search') { search = filter[key]; continue }
 
     const val = filter[key]
     if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
@@ -55,12 +49,15 @@ export function buildFilter(filter) {
     order,
     limit,
     offset,
+    search,
   }
 }
 
 // Execute a query on a collection using a parsed filter
 export function exec(db, collection, filterStr) {
-  const { where, params, order, limit, offset } = parseFilter(filterStr)
+  const { where, params, order, limit, offset, search } = parseFilter(filterStr)
+
+  if (search) return execFts(db, collection, search, where, params, order, limit, offset)
 
   let sql = `SELECT * FROM "${collection}"`
   if (where) sql += ` WHERE ${where}`
@@ -73,7 +70,9 @@ export function exec(db, collection, filterStr) {
 
 // Execute a count query on a collection using a parsed filter
 export function count(db, collection, filterStr) {
-  const { where, params } = parseFilter(filterStr)
+  const { where, params, search } = parseFilter(filterStr)
+
+  if (search) return countFts(db, collection, search, where, params)
 
   let sql = `SELECT COUNT(*) as count FROM "${collection}"`
   if (where) sql += ` WHERE ${where}`
@@ -89,6 +88,75 @@ export function isCount(filterStr) {
     return filter.$count === true
   } catch { return false }
 }
+
+// --- FTS5 ---
+
+const ftsReady = new Set()
+
+function ensureFts(db, collection, fields) {
+  const ftsTable = `${collection}_fts`
+  const key = `${collection}:${fields.join(',')}`
+  if (ftsReady.has(key)) return ftsTable
+
+  const exists = Sql.get(db, `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [ftsTable])
+  if (!exists) {
+    const cols = fields.map(f => `"${f}"`).join(', ')
+    Sql.run(db, `CREATE VIRTUAL TABLE "${ftsTable}" USING fts5(${cols}, content="${collection}", content_rowid=rowid)`)
+
+    // Populate from existing data
+    Sql.run(db, `INSERT INTO "${ftsTable}"("${ftsTable}") VALUES('rebuild')`)
+
+    // Triggers to keep in sync
+    const newVals = fields.map(f => `new."${f}"`).join(', ')
+    const oldVals = fields.map(f => `old."${f}"`).join(', ')
+    Sql.run(db, `CREATE TRIGGER IF NOT EXISTS "${ftsTable}_ai" AFTER INSERT ON "${collection}" BEGIN INSERT INTO "${ftsTable}"(rowid, ${cols}) VALUES (new.rowid, ${newVals}); END`)
+    Sql.run(db, `CREATE TRIGGER IF NOT EXISTS "${ftsTable}_ad" AFTER DELETE ON "${collection}" BEGIN INSERT INTO "${ftsTable}"("${ftsTable}", rowid, ${cols}) VALUES('delete', old.rowid, ${oldVals}); END`)
+    Sql.run(db, `CREATE TRIGGER IF NOT EXISTS "${ftsTable}_au" AFTER UPDATE ON "${collection}" BEGIN INSERT INTO "${ftsTable}"("${ftsTable}", rowid, ${cols}) VALUES('delete', old.rowid, ${oldVals}); INSERT INTO "${ftsTable}"(rowid, ${cols}) VALUES (new.rowid, ${newVals}); END`)
+  }
+
+  ftsReady.add(key)
+  return ftsTable
+}
+
+function buildMatchExpr(terms) {
+  // Each term becomes a prefix query, AND'd together
+  // "mr" "beast" → "mr" * AND "beast" *
+  return terms.map(t => {
+    const escaped = t.replace(/"/g, '""')
+    return `"${escaped}" *`
+  }).join(' AND ')
+}
+
+function execFts(db, collection, search, where, params, order, limit, offset) {
+  const { fields, terms } = search
+  const ftsTable = ensureFts(db, collection, fields)
+  const matchExpr = buildMatchExpr(terms)
+
+  let sql = `SELECT "${collection}".* FROM "${collection}" JOIN "${ftsTable}" ON "${collection}".rowid = "${ftsTable}".rowid WHERE "${ftsTable}" MATCH ?`
+  const allParams = [matchExpr, ...params]
+
+  if (where) sql += ` AND ${where}`
+  if (order) sql += ` ORDER BY ${order}`
+  if (limit != null) sql += ` LIMIT ${limit}`
+  if (offset != null) sql += ` OFFSET ${offset}`
+
+  return Sql.all(db, sql, allParams)
+}
+
+function countFts(db, collection, search, where, params) {
+  const { fields, terms } = search
+  const ftsTable = ensureFts(db, collection, fields)
+  const matchExpr = buildMatchExpr(terms)
+
+  let sql = `SELECT COUNT(*) as count FROM "${collection}" JOIN "${ftsTable}" ON "${collection}".rowid = "${ftsTable}".rowid WHERE "${ftsTable}" MATCH ?`
+  const allParams = [matchExpr, ...params]
+
+  if (where) sql += ` AND ${where}`
+
+  return Sql.get(db, sql, allParams)
+}
+
+// --- Operators ---
 
 const OPS = {
   $gt:  '>',
