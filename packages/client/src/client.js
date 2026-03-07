@@ -1,4 +1,40 @@
 // Client — JS API for my-sqlite (get, put, patch, del, post, options)
+//
+// Connection string: HOST/api/DB_NAME/COLLECTION#TOKEN
+//   - Auto-prefixes https:// (or http:// for localhost/127.0.0.1)
+//   - Token from: hash, username, password, ?token=, or MY_SQLITE_TOKEN env
+//
+// Query filter operators (used in get/del filters):
+//   { field: value }              — exact match
+//   { field: { $gt: v } }         — greater than
+//   { field: { $lt: v } }         — less than
+//   { field: { $gte: v } }        — greater than or equal
+//   { field: { $lte: v } }        — less than or equal
+//   { field: { $ne: v } }         — not equal
+//   { field: { $in: [a, b] } }    — in array
+//   { field: { $nin: [a, b] } }   — not in array
+//   { field: { $like: 'prefix' } } — starts with (appends % automatically)
+//
+// Query modifiers:
+//   { $limit: 100 }               — max results
+//   { $skip: 50 }                 — offset (use with $sort for pagination)
+//   { $sort: { field: 1 } }       — sort ASC (1) or DESC (-1), multi-field ok
+//   { $count: true }              — returns { count: N } instead of rows
+//
+// Operations:
+//   get(conn, filter)   — query docs (filter optional, supports all operators above)
+//   get(conn, 'id')     — get by id
+//   get(conn, [ids])    — get by id array
+//   put(conn, docs)     — upsert: full replace (REPLACES entire doc, use with complete data)
+//   patch(conn, docs)   — partial update: merges fields (each doc needs id)
+//   del(conn)           — drop collection
+//   del(conn, 'id')     — delete by id
+//   del(conn, [ids])    — delete by ids
+//   del(conn, {filter}) — delete by query
+//   del(conn, {})       — delete all data, keep schema
+//   options(conn)       — read schema
+//   options(conn, meta) — set schema (indexes, key)
+//
 import * as Fetch from './access/fetch.js'
 
 const connectionCache = new Map()
