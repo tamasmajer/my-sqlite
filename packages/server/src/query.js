@@ -24,6 +24,14 @@ export function buildFilter(filter) {
     if (key === '$skip') { offset = filter[key]; continue }
     if (key === '$sort') { order = parseSortValue(filter[key]); continue }
     if (key === '$count') { continue }
+    if (key === '$search') {
+      const { fields, terms } = filter[key]
+      for (const term of terms) {
+        const orClauses = fields.map(f => { params.push(`%${term}%`); return `"${f}" LIKE ?` })
+        conditions.push(`(${orClauses.join(' OR ')})`)
+      }
+      continue
+    }
 
     const val = filter[key]
     if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
