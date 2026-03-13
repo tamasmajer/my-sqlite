@@ -8,14 +8,15 @@ function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export function renderSidebar(currentServer, servers) {
+export function renderSidebar(currentServer, servers, mode = 'both') {
   const items = [
-    `<a href="#" class="server-item ${!currentServer ? 'active' : ''}" data-server="">Local</a>`,
+    ...(mode === 'ui' ? [] : [`<a href="#" class="server-item ${!currentServer ? 'active' : ''}" data-server="">This Server</a>`]),
     ...servers.map(s => {
       const label = s.url.replace(/^https?:\/\//, '')
+      const certUrl = s.url.replace(/\/?$/, '/api')
       return `<div class="server-entry">` +
         `<a href="#" class="server-item ${s.url === currentServer ? 'active' : ''}" data-server="${esc(s.url)}">${esc(label)}</a>` +
-        `<a href="${esc(s.url)}" target="_blank" class="server-link" title="Open (accept cert)">↗</a>` +
+        `<a href="${esc(certUrl)}" target="_blank" class="server-link" title="Open (accept cert)">↗</a>` +
         `<button class="btn-del server-remove" data-server="${esc(s.url)}">✕</button>` +
         `</div>`
     })

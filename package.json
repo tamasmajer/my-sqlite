@@ -6,7 +6,8 @@
   "scripts": {
     "ui": "node packages/server/src/server.js --mode ui --port 3001 --host 0.0.0.0",
     "api": "node packages/server/src/server.js --mode api --port 3000 --host 0.0.0.0",
-    "dev": "node packages/server/src/server.js --mode both --port 3000 --host 0.0.0.0"
+    "dev": "node packages/server/src/server.js --mode both --port 3000 --host 0.0.0.0",
+    "stop": "node -e \"const fs=require('fs');const pidPath='./data/.pid';if(!fs.existsSync(pidPath)){console.log('No pid file at',pidPath);process.exit(0);}const pid=Number(fs.readFileSync(pidPath,'utf8').trim());if(!pid){console.log('Invalid pid');process.exit(1);}try{process.kill(pid,'SIGTERM');console.log('Stopped pid',pid);}catch(e){console.error('Failed to stop pid',pid, e.message);process.exit(1);}\""
   },
   "workspaces": [
     "packages/*"

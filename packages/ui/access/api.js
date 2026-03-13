@@ -29,7 +29,17 @@ export function setServer(url) {
 }
 
 export function getServers() {
-  try { return JSON.parse(Browser.storageGet('my_sqlite_servers') || '[]') } catch { return [] }
+  try {
+    const list = JSON.parse(Browser.storageGet('my_sqlite_servers') || '[]')
+    const map = new Map()
+    for (const s of list) {
+      const url = normalizeServerUrl(s.url)
+      if (!url) continue
+      if (!map.has(url)) map.set(url, { url, token: s.token || '' })
+      else if (s.token) map.get(url).token = s.token
+    }
+    return [...map.values()]
+  } catch { return [] }
 }
 
 export function addServer(url, token) {
@@ -72,9 +82,15 @@ export async function fetchConfig() {
 }
 
 export function mergeServers(configServers) {
-  for (const s of configServers) {
-    addServer(s.url, s.token)
+  const current = getServers()
+  const map = new Map(current.map(s => [s.url, { ...s }]))
+  for (const s of configServers || []) {
+    const url = normalizeServerUrl(s.url)
+    if (!url) continue
+    if (!map.has(url)) map.set(url, { url, token: s.token || '' })
+    else if (s.token) map.get(url).token = s.token
   }
+  Browser.storageSet('my_sqlite_servers', JSON.stringify([...map.values()]))
 }
 
 function normalizeServerUrl(url) {

@@ -41,6 +41,13 @@ export function route(req, res, config) {
     return
   }
 
+  if (mode !== 'api' && path === '/') {
+    const adminUrl = new URL(url)
+    adminUrl.pathname = '/admin'
+    handleAdmin(req, res, config, adminUrl)
+    return
+  }
+
   Http.respond(res, 404, {}, 'not found')
 }
 
@@ -179,7 +186,7 @@ function handleAdmin(req, res, config, url) {
 
   if (relPath === '/config') {
     const servers = parseServersFlag(config.servers)
-    json(res, 200, { servers })
+    json(res, 200, { servers, mode: config.mode || 'both' })
     return
   }
 

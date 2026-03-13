@@ -4,8 +4,10 @@ import * as Browser from './access/browser.js'
 import * as Router from './router.js'
 import * as View from './view.js'
 
+let _config = {}
+
 function page(app, content) {
-  const sidebar = View.renderSidebar(Api.getServer(), Api.getServers())
+  const sidebar = View.renderSidebar(Api.getServer(), Api.getServers(), _config.mode || 'both')
   Browser.setHtml(app, View.layout(sidebar, content))
 }
 
@@ -213,6 +215,20 @@ Browser.onSubmit(async e => {
 
 Browser.onPopState(render)
 Api.fetchConfig().then(cfg => {
+  _config = cfg || {}
   if (cfg.servers) Api.mergeServers(cfg.servers)
+  const current = Api.getServer()
+  if (cfg.servers && cfg.servers.length) {
+    if (current) {
+      const s = cfg.servers.find(x => x.url === current)
+      if (s && s.token) Api.setToken(s.token)
+    } else {
+      const s = cfg.servers[0]
+      if (s && s.url) {
+        Api.setServer(s.url)
+        if (s.token) Api.setToken(s.token)
+      }
+    }
+  }
   render()
 })

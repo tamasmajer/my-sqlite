@@ -21,7 +21,11 @@ export function listen(opts, handler) {
     : createServer(handler)
   server.listen(port, host, () => {
     const proto = tls ? 'https' : 'http'
-    console.log(`${proto}://${host}:${port}`)
+    const displayHost = (host === '0.0.0.0' || host === '::') ? 'localhost' : host
+    const bind = `${proto}://${host}:${port}`
+    const hint = `${proto}://${displayHost}:${port}`
+    if (bind !== hint) console.log(`${bind} (open ${hint})`)
+    else console.log(bind)
   })
   return server
 }
