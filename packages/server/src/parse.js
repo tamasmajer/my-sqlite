@@ -50,7 +50,7 @@ function decodeQueryInput(input) {
 
 function parseUrlNative(input) {
   const result = {}
-  const pairs = splitTopLevel(input, [',', '&'])
+  const pairs = splitTopLevel(input, [',', '&'], true)
 
   for (const pair of pairs) {
     if (!pair) continue
@@ -251,7 +251,10 @@ function parseValue(raw) {
   if (trimmed.startsWith('(') || trimmed.startsWith('[')) {
     const end = trimmed.endsWith(')') || trimmed.endsWith(']')
     if (!end) return autotype(trimmed)
-    const inner = trimmed.slice(1, -1)
+    const inner = trimmed.slice(1, -1).trim()
+    if (hasTopLevelPair(inner)) {
+      return parseUrlNative(inner)
+    }
     const parts = splitTopLevel(inner, [','])
     return parts.map(p => parseValue(p))
   }
@@ -267,7 +270,7 @@ function autotype(s) {
   return s
 }
 
-function splitTopLevel(input, delimiters) {
+function splitTopLevel(input, delimiters, splitOnSpace = false) {
   const result = []
   let current = ''
   let depth = 0
@@ -282,10 +285,19 @@ function splitTopLevel(input, delimiters) {
     if (ch === '"') { inQuote = true; current += ch; continue }
     if (ch === '(' || ch === '[' || ch === '{') { depth++; current += ch; continue }
     if (ch === ')' || ch === ']' || ch === '}') { depth--; current += ch; continue }
-    if (depth === 0 && delimiters.includes(ch)) {
-      result.push(current.trim())
-      current = ''
-      continue
+    if (depth === 0) {
+      if (delimiters.includes(ch)) {
+        result.push(current.trim())
+        current = ''
+        continue
+      }
+      if (splitOnSpace && /\s/.test(ch)) {
+        if (current.trim()) {
+          result.push(current.trim())
+          current = ''
+        }
+        continue
+      }
     }
     current += ch
   }
@@ -304,4 +316,21 @@ function splitFirst(input, seps) {
 
 function unescapeBare(s) {
   return s.replace(/\\(.)/g, '$1')
+}
+
+function hasTopLevelPair(input) {
+  let depth = 0
+  let inQuote = false
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    if (inQuote) {
+      if (ch === '"' && input[i - 1] !== '\\') inQuote = false
+      continue
+    }
+    if (ch === '"') { inQuote = true; continue }
+    if (ch === '(' || ch === '[' || ch === '{') { depth++; continue }
+    if (ch === ')' || ch === ']' || ch === '}') { depth--; continue }
+    if (depth === 0 && (ch === '=' || ch === ':')) return true
+  }
+  return false
 }

@@ -178,6 +178,23 @@ Produces:
 {"tags": {"$nin": ["archived", "deleted"]}}
 ```
 
+### 5.7.1 Object Values in URL-Native
+
+Parentheses/brackets can also wrap **key-value pairs** to represent an object value:
+
+```
+prefs=(theme=dark lang=en)
+meta=(a=1 b=2)
+```
+
+Produces:
+```json
+{"prefs": {"theme": "dark", "lang": "en"}}
+{"meta": {"a": 1, "b": 2}}
+```
+
+If the content inside `()`/`[]` contains a top-level `=` or `:`, it is parsed as an object. Otherwise it is parsed as an array.
+
 ### 5.8 Search
 
 Simple search (string):
@@ -296,6 +313,7 @@ The characters `,` `&` `=` `:` `(` `)` `[` `]` `$` `{` `}` have structural meani
 1. **Inside double quotes:** all structural characters are literal. Only `"` and `\` need escaping (as `\"` and `\\`).
 2. **Outside quotes:** backslash-escape any structural character: `\,` `\=` `\:` `\$` `\(` `\)` `\[` `\]` `\{` `\}`
 3. **In URLs:** standard percent-encoding always works as an alternative.
+4. **Spaces at top-level** in URL-native separate pairs. For strings with spaces, use quotes or `\ `.
 
 ### 9.3 Dollar Sign in Values
 
@@ -323,11 +341,14 @@ Dot in field names is literal, not a nesting operator. The field `user.name` mea
 
 ## 10. Nested Objects as Values
 
-URL-native is intentionally flat. For fields that store JSON objects/arrays (like a `prefs` column), you cannot express nested structure in URL-native. Use lazy or strict JSON:
+URL-native is intentionally flat, but supports **flat object values** via parentheses/brackets. For deeper nested JSON, use lazy or strict JSON:
 
 ```
 # URL-native — cannot express this:
 # prefs = {"theme": "dark", "lang": "en"}
+
+# URL-native — flat object value:
+# prefs = (theme=dark lang=en)
 
 # Lazy JSON — works:
 {prefs:{theme:dark,lang:en}}
