@@ -29,6 +29,15 @@ export async function postJson(url, body, headers = {}) {
   return jsonOrThrow(res)
 }
 
+export async function postText(url, body, headers = {}) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'text/plain', ...headers },
+    body: body ?? '',
+  })
+  return jsonOrThrow(res)
+}
+
 export async function patchJson(url, body, headers = {}) {
   const res = await fetch(url, {
     method: 'PATCH',

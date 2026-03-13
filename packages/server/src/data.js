@@ -6,7 +6,23 @@ import * as Query from './query.js'
 // --- Query ---
 
 export function query(db, collection, filterStr) {
-  return Query.exec(db, collection, filterStr)
+  const filter = Query.parseQuery(filterStr)
+  return queryParsed(db, collection, filter)
+}
+
+export function queryParsed(db, collection, filter) {
+  const normalized = normalizeSearch(db, collection, filter || {})
+  return Query.execParsed(db, collection, normalized)
+}
+
+export function count(db, collection, filterStr) {
+  const filter = Query.parseQuery(filterStr)
+  return countParsed(db, collection, filter)
+}
+
+export function countParsed(db, collection, filter) {
+  const normalized = normalizeSearch(db, collection, filter || {})
+  return Query.countParsed(db, collection, normalized)
 }
 
 // --- Upsert (INSERT OR REPLACE) ---
@@ -64,7 +80,10 @@ function execPatch(db, collection, doc, keyFields) {
 // --- Remove ---
 
 export function remove(db, collection, filterStr) {
-  const { where, params } = Query.parseFilter(filterStr)
+  const { where, params, search } = Query.parseFilter(filterStr)
+  if (search) {
+    throw new Error('Search is not supported for delete')
+  }
   if (!where) {
     // empty filter {} = delete all data, keep table
     Sql.run(db, `DELETE FROM "${collection}"`)
@@ -72,6 +91,36 @@ export function remove(db, collection, filterStr) {
     Sql.run(db, `DELETE FROM "${collection}" WHERE ${where}`, params)
   }
   return { ok: 1 }
+}
+
+export function removeParsed(db, collection, filter) {
+  const { where, params, search } = Query.buildFilter(filter || {})
+  if (search) {
+    throw new Error('Search is not supported for delete')
+  }
+  if (!where) {
+    Sql.run(db, `DELETE FROM "${collection}"`)
+  } else {
+    Sql.run(db, `DELETE FROM "${collection}" WHERE ${where}`, params)
+  }
+  return { ok: 1 }
+}
+
+function normalizeSearch(db, collection, filter) {
+  if (!filter || typeof filter !== 'object') return filter
+  const val = filter.$search
+  if (typeof val === 'string') {
+    const trimmed = val.trim()
+    if (!trimmed) {
+      delete filter.$search
+      return filter
+    }
+    const fields = Schema.getSearchFields(db, collection)
+    if (!fields.length) throw new Error('No search fields configured for collection')
+    const terms = trimmed.split(/\s+/).filter(Boolean)
+    filter.$search = { fields, terms }
+  }
+  return filter
 }
 
 // --- Value conversion ---

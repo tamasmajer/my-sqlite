@@ -15,6 +15,7 @@ export function renderSidebar(currentServer, servers) {
       const label = s.url.replace(/^https?:\/\//, '')
       return `<div class="server-entry">` +
         `<a href="#" class="server-item ${s.url === currentServer ? 'active' : ''}" data-server="${esc(s.url)}">${esc(label)}</a>` +
+        `<a href="${esc(s.url)}" target="_blank" class="server-link" title="Open (accept cert)">↗</a>` +
         `<button class="btn-del server-remove" data-server="${esc(s.url)}">✕</button>` +
         `</div>`
     })
@@ -90,7 +91,7 @@ export function renderDatabases(dbs) {
 }
 
 export function renderCollections(dbName, collections) {
-  const entries = Object.entries(collections || {})
+  const entries = (collections || []).map(c => [c.id, c])
 
   const crumbs = nav([{ label: 'admin', href: '/admin' }, { label: dbName }])
 
@@ -111,18 +112,20 @@ export function renderCollections(dbName, collections) {
   const rows = entries.map(([name, info]) => {
     const cols = info.columns.join(', ')
     const idx = info.index.length ? info.index.map(i => badge(i, 'idx')).join(' ') : '<span class="muted">none</span>'
+    const search = info.search && info.search.length ? info.search.map(i => badge(i, 'search')).join(' ') : '<span class="muted">none</span>'
     const key = info.key || 'id'
     return `<tr>
       <td><a href="/admin/${dbName}/${name}">${name}</a></td>
       <td class="mono">${cols}</td>
       <td>${idx}</td>
+      <td>${search}</td>
       <td class="mono">${key}</td>
     </tr>`
   }).join('')
 
   const table = `
     <table>
-      <thead><tr><th>Collection</th><th>Columns</th><th>Indexes</th><th>Key</th></tr></thead>
+      <thead><tr><th>Collection</th><th>Columns</th><th>Indexes</th><th>Search</th><th>Key</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `
@@ -174,6 +177,7 @@ export function renderData(dbName, collName, rows, info, q, skip, limit, totalCo
 
   const cols = info.columns || []
   const idxCols = info.index || []
+  const searchCols = info.search || []
   const keyField = info.key || 'id'
 
   const curFilter = safeParseJson(q)
@@ -243,9 +247,14 @@ export function renderData(dbName, collName, rows, info, q, skip, limit, totalCo
       <div class="schema-row"><span class="label">Key:</span> <code>${keyField}</code></div>
       <div class="schema-row"><span class="label">Columns:</span> <code>${cols.join(', ')}</code></div>
       <div class="schema-row"><span class="label">Indexes:</span> ${idxCols.length ? idxCols.map(i => badge(i, 'idx')).join(' ') : '<span class="muted">none</span>'}</div>
+      <div class="schema-row"><span class="label">Search:</span> ${searchCols.length ? searchCols.map(i => badge(i, 'search')).join(' ') : '<span class="muted">none</span>'}</div>
       <form id="index-form" data-db="${dbName}" data-coll="${collName}" class="inline-form" style="margin-top:8px">
         <input name="indexFields" placeholder="col1, col2" value="${idxCols.join(', ')}">
         <button type="submit">Set Indexes</button>
+      </form>
+      <form id="search-form" data-db="${dbName}" data-coll="${collName}" class="inline-form" style="margin-top:8px">
+        <input name="searchFields" placeholder="col1, col2" value="${searchCols.join(', ')}">
+        <button type="submit">Set Search</button>
       </form>
     </div>
   `

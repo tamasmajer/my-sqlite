@@ -1,13 +1,18 @@
 // Query — MongoDB-style JSON filter to SQL compiler
 import * as Sql from './access/sqlite.js'
+import * as Parse from './parse.js'
 
 // Parse JSON filter string into SQL components
 // Input: raw query string (JSON), e.g. '{"age":{"$gte":30},"$sort":{"age":-1},"$limit":10}'
 // Returns: { where, params, order, limit, offset }
 export function parseFilter(filterStr) {
   if (!filterStr) return { where: '', params: [], order: '', limit: null, offset: null, search: null }
-  const filter = JSON.parse(decodeURIComponent(filterStr))
+  const filter = Parse.parseQuery(filterStr)
   return buildFilter(filter)
+}
+
+export function parseQuery(filterStr) {
+  return Parse.parseQuery(filterStr)
 }
 
 // Build SQL WHERE/ORDER/LIMIT from a filter object
@@ -55,9 +60,33 @@ export function buildFilter(filter) {
 
 // Execute a query on a collection using a parsed filter
 export function exec(db, collection, filterStr) {
-  const { where, params, order, limit, offset, search } = parseFilter(filterStr)
+  const filter = Parse.parseQuery(filterStr)
+  return execParsed(db, collection, filter)
+}
 
-  if (search) return execFts(db, collection, search, where, params, order, limit, offset)
+// Execute a count query on a collection using a parsed filter
+export function count(db, collection, filterStr) {
+  const filter = Parse.parseQuery(filterStr)
+  return countParsed(db, collection, filter)
+}
+
+// Check if filter has $count flag
+export function isCount(filterStr) {
+  if (!filterStr) return false
+  try {
+    const filter = Parse.parseQuery(filterStr)
+    return filter.$count === true
+  } catch { return false }
+}
+
+// Execute a query on a collection using a parsed filter object
+export function execParsed(db, collection, filter) {
+  const { where, params, order, limit, offset, search } = buildFilter(filter || {})
+
+  if (search) {
+    if (typeof search === 'string') throw new Error('Search fields required')
+    return execFts(db, collection, search, where, params, order, limit, offset)
+  }
 
   let sql = `SELECT * FROM "${collection}"`
   if (where) sql += ` WHERE ${where}`
@@ -68,11 +97,14 @@ export function exec(db, collection, filterStr) {
   return Sql.all(db, sql, params)
 }
 
-// Execute a count query on a collection using a parsed filter
-export function count(db, collection, filterStr) {
-  const { where, params, search } = parseFilter(filterStr)
+// Execute a count query on a collection using a parsed filter object
+export function countParsed(db, collection, filter) {
+  const { where, params, search } = buildFilter(filter || {})
 
-  if (search) return countFts(db, collection, search, where, params)
+  if (search) {
+    if (typeof search === 'string') throw new Error('Search fields required')
+    return countFts(db, collection, search, where, params)
+  }
 
   let sql = `SELECT COUNT(*) as count FROM "${collection}"`
   if (where) sql += ` WHERE ${where}`
@@ -80,20 +112,17 @@ export function count(db, collection, filterStr) {
   return Sql.get(db, sql, params)
 }
 
-// Check if filter has $count flag
-export function isCount(filterStr) {
-  if (!filterStr) return false
-  try {
-    const filter = JSON.parse(decodeURIComponent(filterStr))
-    return filter.$count === true
-  } catch { return false }
-}
-
 // --- FTS5 ---
 
 const ftsReady = new Set()
 
-function ensureFts(db, collection, fields) {
+export function clearFtsCache(collection) {
+  for (const key of ftsReady) {
+    if (key.startsWith(collection + ':')) ftsReady.delete(key)
+  }
+}
+
+export function ensureFts(db, collection, fields) {
   const ftsTable = `${collection}_fts`
   const key = `${collection}:${fields.join(',')}`
   if (ftsReady.has(key)) return ftsTable
@@ -185,6 +214,7 @@ function opToSql(field, op, value) {
 }
 
 function parseSortValue(val) {
+  if (!val || typeof val !== 'object') return ''
   return Object.entries(val).map(([field, dir]) =>
     `"${field}" ${dir === -1 ? 'DESC' : 'ASC'}`
   ).join(', ')

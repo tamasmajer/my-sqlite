@@ -6,6 +6,7 @@ import * as Auth from './auth.js'
 import * as Sql from './access/sqlite.js'
 import * as Http from './access/http.js'
 import * as Fs from './access/fs.js'
+import * as Parse from './parse.js'
 
 export function route(req, res, config) {
   const url = new URL(req.url, `http://${req.headers.host}`)
@@ -51,39 +52,43 @@ function handleApi(req, res, config, url) {
       return
     }
 
-    // /api/:db — list, drop, batch
+    // /api/:db — list, drop, collections config, batch
     if (!collection) {
       if (method === 'GET') {
         const db = Schema.openDb(config.datadir, dbName)
         json(res, 200, Schema.listCollections(db))
       } else if (method === 'DELETE') {
-        Schema.dropDb(config.datadir, dbName)
-        json(res, 200, { ok: 1, dropped: true })
+        if (filterStr) {
+          const filter = Parse.parseQuery(filterStr)
+          const collId = filter.id
+          if (!collId) {
+            json(res, 400, { ok: 0, error: 'Missing collection id' })
+            return
+          }
+          const db = Schema.openDb(config.datadir, dbName)
+          Schema.dropCollection(db, collId)
+          if (Schema.isDbEmpty(db)) Schema.dropDb(config.datadir, dbName)
+          json(res, 200, { ok: 1, dropped: true })
+        } else {
+          Schema.dropDb(config.datadir, dbName)
+          json(res, 200, { ok: 1, dropped: true })
+        }
       } else if (method === 'PUT') {
         readBody(req, body => {
           try {
             const db = Schema.openDb(config.datadir, dbName)
-            const result = { ok: 1 }
-            Sql.transaction(db, () => {
-              for (const [coll, docs] of Object.entries(body)) {
-                Data.upsert(db, coll, docs)
-                result[coll] = { ok: 1 }
-              }
-            })
+            const result = Schema.setCollectionConfig(db, body)
             json(res, 200, result)
           } catch (err) { json(res, 500, { ok: 0, error: err.message }) }
         })
       } else if (method === 'POST') {
         readBody(req, body => {
           try {
-            const db = Schema.openDb(config.datadir, dbName)
-            const result = { ok: 1 }
-            Sql.transaction(db, () => {
-              for (const [coll, ops] of Object.entries(body)) {
-                result[coll] = ops.map(op => execOp(db, coll, op))
-              }
-            })
-            json(res, 200, result)
+            if (typeof body !== 'string') {
+              json(res, 400, { ok: 0, error: 'Batch body must be text/plain' })
+              return
+            }
+            handleBatch(req, res, config, dbName, body)
           } catch (err) { json(res, 500, { ok: 0, error: err.message }) }
         })
       } else {
@@ -107,7 +112,7 @@ function handleCollection(req, res, config, dbName, collection, method, filterSt
       return
     }
     if (Query.isCount(filterStr)) {
-      json(res, 200, Query.count(db, collection, filterStr))
+      json(res, 200, Data.count(db, collection, filterStr))
       return
     }
     const rows = Data.query(db, collection, filterStr)
@@ -154,24 +159,6 @@ function handleCollection(req, res, config, dbName, collection, method, filterSt
     return
   }
 
-  if (method === 'OPTIONS') {
-    const db = Schema.openDb(config.datadir, dbName)
-    const ct = req.headers['content-type'] || ''
-    if (ct.includes('json')) {
-      readBody(req, body => {
-        try {
-          Schema.setMeta(db, collection, body)
-          json(res, 200, Schema.getMeta(db, collection))
-        } catch (err) {
-          json(res, 500, { ok: 0, error: err.message })
-        }
-      })
-    } else {
-      json(res, 200, Schema.getMeta(db, collection))
-    }
-    return
-  }
-
   json(res, 405, { ok: 0, error: 'Method not allowed' })
 }
 
@@ -211,11 +198,19 @@ function handleAdmin(req, res, config, url) {
 function readBody(req, cb) {
   Http.readBody(req, raw => {
     const ct = req.headers['content-type'] || ''
+    if (ct.includes('text/plain')) {
+      cb(raw)
+      return
+    }
     if (ct.includes('json')) {
       cb(JSON.parse(raw))
-    } else {
-      cb(Object.fromEntries(new URLSearchParams(raw)))
+      return
     }
+    if (ct.includes('application/x-www-form-urlencoded')) {
+      cb(Object.fromEntries(new URLSearchParams(raw)))
+      return
+    }
+    cb(raw)
   })
 }
 
@@ -231,26 +226,65 @@ function parseServersFlag(val) {
   }).filter(s => s.url)
 }
 
-function execOp(db, coll, op) {
-  const [method, data] = Object.entries(op)[0]
-  switch (method.toUpperCase()) {
-    case 'PUT': return Data.upsert(db, coll, data)
-    case 'PATCH': return Data.patch(db, coll, data)
-    case 'DELETE': return Data.remove(db, coll, typeof data === 'string' ? data : JSON.stringify(data))
-    case 'GET': {
-      const filterStr = typeof data === 'string' ? data : JSON.stringify(data)
-      const rows = Data.query(db, coll, filterStr)
-      const jsonCols = Schema.jsonColumns(db, coll)
-      return Data.fromSqlRows(rows, jsonCols)
-    }
-    default: return { ok: 0, error: `Unknown op: ${method}` }
-  }
-}
-
 function corsHeaders() {
   return {
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET, PUT, PATCH, DELETE, OPTIONS',
+    'access-control-allow-methods': 'GET, PUT, PATCH, DELETE, POST, OPTIONS',
     'access-control-allow-headers': 'content-type, authorization',
+  }
+}
+
+function handleBatch(req, res, config, dbName, body) {
+  const db = Schema.openDb(config.datadir, dbName)
+  const lines = body.split(/\r?\n/)
+  const commands = []
+  for (let i = 0; i < lines.length; i++) {
+    try {
+      const cmd = Parse.parseBatchLine(lines[i])
+      if (!cmd) continue
+      commands.push({ ...cmd, _line: i + 1 })
+    } catch (err) {
+      err._line = i + 1
+      throw err
+    }
+  }
+  try {
+    const results = []
+    Sql.transaction(db, () => {
+      for (const cmd of commands) {
+        try {
+          results.push(execBatchCommand(db, cmd))
+        } catch (err) {
+          err._line = cmd._line
+          throw err
+        }
+      }
+    })
+    json(res, 200, results)
+  } catch (err) {
+    const line = err._line || null
+    json(res, 400, { ok: 0, error: err.message, line })
+  }
+}
+
+function execBatchCommand(db, cmd) {
+  const coll = cmd.collection
+  switch (cmd.method) {
+    case 'GET': {
+      if (cmd.filter && cmd.filter.$count === true) {
+        return Data.countParsed(db, coll, cmd.filter)
+      }
+      const rows = Data.queryParsed(db, coll, cmd.filter)
+      const jsonCols = Schema.jsonColumns(db, coll)
+      return Data.fromSqlRows(rows, jsonCols)
+    }
+    case 'PUT':
+      return Data.upsert(db, coll, cmd.body)
+    case 'PATCH':
+      return Data.patch(db, coll, cmd.body)
+    case 'DELETE':
+      return Data.removeParsed(db, coll, cmd.filter)
+    default:
+      return { ok: 0, error: `Unknown op: ${cmd.method}` }
   }
 }

@@ -198,6 +198,16 @@ Browser.onSubmit(async e => {
     } catch (err) {
       alert(err.message)
     }
+  } else if (form.id === 'search-form') {
+    const db = Browser.getAttr(form, 'data-db')
+    const coll = Browser.getAttr(form, 'data-coll')
+    try {
+      const fields = fd.searchFields.split(',').map(s => s.trim()).filter(Boolean)
+      await Api.setMeta(db, coll, { search: fields })
+      render()
+    } catch (err) {
+      alert(err.message)
+    }
   }
 })
 

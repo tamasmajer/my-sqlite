@@ -32,8 +32,9 @@
 //   del(conn, [ids])    — delete by ids
 //   del(conn, {filter}) — delete by query
 //   del(conn, {})       — delete all data, keep schema
-//   options(conn)       — read schema
-//   options(conn, meta) — set schema (indexes, key)
+//   options(conn)       — read collection schema
+//   options(conn, meta) — set collection config (index, search, key)
+//   batch(conn, text)   — text batch protocol (POST text/plain to db endpoint)
 //
 import * as Fetch from './access/fetch.js'
 
@@ -108,12 +109,26 @@ export async function del(conn, filterOrId) {
   return Fetch.deleteWithQuery(conn.endpoint + qs, authHeaders(conn))
 }
 
-// OPTIONS — read or set schema
-// options(conn)        → read schema
-// options(conn, meta)  → set schema (indexes, key)
+// OPTIONS — read or set schema (implemented via GET/PUT on db endpoint)
+// options(conn)        → read collection schema
+// options(conn, meta)  → set collection config (indexes, search, key)
 export async function options(conn, meta) {
   if (typeof conn === 'string') conn = connect(conn)
-  return Fetch.optionsJson(conn.endpoint, meta, authHeaders(conn))
+  const { dbEndpoint, collection } = splitEndpoint(conn.endpoint)
+  if (!collection) {
+    return Fetch.getJson(dbEndpoint, authHeaders(conn))
+  }
+  if (meta) {
+    return Fetch.putJson(dbEndpoint, { id: collection, ...meta }, authHeaders(conn))
+  }
+  const cols = await Fetch.getJson(dbEndpoint, authHeaders(conn))
+  return (cols || []).find(c => c.id === collection) || null
+}
+
+// BATCH — text protocol
+export async function batch(conn, text) {
+  if (typeof conn === 'string') conn = connect(conn)
+  return Fetch.postText(conn.endpoint, text, authHeaders(conn))
 }
 
 // ID helper
@@ -138,4 +153,13 @@ function toFilter(queryOrId) {
 
 function authHeaders(conn) {
   return conn.token ? { authorization: `Bearer ${conn.token}` } : {}
+}
+
+function splitEndpoint(endpoint) {
+  const url = new URL(endpoint)
+  const parts = url.pathname.replace(/\/$/, '').split('/').filter(Boolean)
+  let collection = null
+  if (parts.length > 2) collection = parts.pop()
+  const dbPath = '/' + parts.join('/')
+  return { dbEndpoint: url.origin + dbPath, collection }
 }

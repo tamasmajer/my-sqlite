@@ -84,22 +84,43 @@ export async function fetchCollections(dbName) {
 }
 
 export async function fetchQuery(dbName, collection, filterStr, skip = 0, limit = 50) {
-  const filter = filterStr ? JSON.parse(filterStr) : {}
-  filter.$limit = limit
-  filter.$skip = skip
-  const qs = '?' + encodeURIComponent(JSON.stringify(filter))
-  return request(`/api/${dbName}/${collection}${qs}`)
+  if (!filterStr) {
+    const qs = '?' + encodeURIComponent(JSON.stringify({ $limit: limit, $skip: skip }))
+    return request(`/api/${dbName}/${collection}${qs}`)
+  }
+  try {
+    const filter = JSON.parse(filterStr)
+    filter.$limit = limit
+    filter.$skip = skip
+    const qs = '?' + encodeURIComponent(JSON.stringify(filter))
+    return request(`/api/${dbName}/${collection}${qs}`)
+  } catch {
+    const base = filterStr.trim()
+    const qs = '?' + base + (base ? '&' : '') + `$limit=${limit}&$skip=${skip}`
+    return request(`/api/${dbName}/${collection}${qs}`)
+  }
 }
 
 export async function fetchCount(dbName, collection, filterStr) {
-  const filter = filterStr ? JSON.parse(filterStr) : {}
-  filter.$count = true
-  const qs = '?' + encodeURIComponent(JSON.stringify(filter))
-  return request(`/api/${dbName}/${collection}${qs}`)
+  if (!filterStr) {
+    const qs = '?' + encodeURIComponent(JSON.stringify({ $count: true }))
+    return request(`/api/${dbName}/${collection}${qs}`)
+  }
+  try {
+    const filter = JSON.parse(filterStr)
+    filter.$count = true
+    const qs = '?' + encodeURIComponent(JSON.stringify(filter))
+    return request(`/api/${dbName}/${collection}${qs}`)
+  } catch {
+    const base = filterStr.trim()
+    const qs = '?' + base + (base ? '&' : '') + `$count=true`
+    return request(`/api/${dbName}/${collection}${qs}`)
+  }
 }
 
 export async function fetchSchema(dbName, collection) {
-  return request(`/api/${dbName}/${collection}`, { method: 'OPTIONS' })
+  const cols = await fetchCollections(dbName)
+  return (cols || []).find(c => c.id === collection) || { id: collection, columns: [], index: [], search: [], key: 'id' }
 }
 
 export async function putDocs(dbName, collection, docs) {
@@ -128,9 +149,9 @@ export async function dropDatabase(dbName) {
 }
 
 export async function setMeta(dbName, collection, meta) {
-  return request(`/api/${dbName}/${collection}`, {
-    method: 'OPTIONS',
+  return request(`/api/${dbName}`, {
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(meta)
+    body: JSON.stringify({ id: collection, ...meta })
   })
 }

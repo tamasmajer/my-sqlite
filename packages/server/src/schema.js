@@ -1,6 +1,7 @@
 // Schema — database and table lifecycle, indexes, metadata
 import * as Sql from './access/sqlite.js'
 import * as Fs from './access/fs.js'
+import * as Query from './query.js'
 
 export function openDb(datadir, name) {
   Fs.ensureDir(datadir)
@@ -9,35 +10,85 @@ export function openDb(datadir, name) {
 }
 
 export function listCollections(db) {
-  const names = Sql.tables(db).filter(n => n !== '_meta')
-  const result = {}
-  for (const name of names) {
-    result[name] = getMeta(db, name)
+  const tables = Sql.tables(db)
+  const names = new Set()
+  for (const name of tables) {
+    if (name === '_meta') continue
+    if (isFtsTable(name)) continue
+    names.add(name)
   }
-  return result
+  if (tables.includes('_meta')) {
+    const rows = Sql.all(db, `SELECT collection FROM _meta`)
+    for (const row of rows) {
+      if (row && row.collection) names.add(row.collection)
+    }
+  }
+  return [...names].map(name => getMeta(db, name))
 }
 
 // --- Meta ---
 
 export function getMeta(db, collection) {
-  const cols = Sql.columns(db, collection).map(c => c.name)
-  const idxList = Sql.indexes(db, collection)
+  const hasTable = tableExists(db, collection)
+  const cols = hasTable ? Sql.columns(db, collection).map(c => c.name) : []
+  const idxList = hasTable ? Sql.indexes(db, collection) : []
   const indexed = []
   for (const idx of idxList) {
     if (!idx.name.startsWith('idx_')) continue
     const idxCols = Sql.indexColumns(db, idx.name)
     indexed.push(...idxCols)
   }
+  const storedIndex = getIndexFields(db, collection)
+  const index = indexed.length ? indexed : storedIndex
   const key = getKeyFields(db, collection)
-  return { columns: cols, index: indexed, key }
+  const search = getSearchFields(db, collection)
+  return { id: collection, columns: cols, index, search, key }
 }
 
 export function setMeta(db, collection, meta) {
   if (meta.index) {
+    ensureMetaTable(db)
+    const fields = Array.isArray(meta.index) ? meta.index : [meta.index]
+    const indexVal = fields.join(',')
+    const existing = Sql.get(db, `SELECT * FROM _meta WHERE collection = ?`, [collection])
+    if (existing) {
+      Sql.run(db, `UPDATE _meta SET index_fields = ? WHERE collection = ?`, [indexVal, collection])
+    } else {
+      Sql.run(db, `INSERT INTO _meta (collection, key_fields, search_fields, index_fields) VALUES (?, ?, ?, ?)`, [collection, '', '', indexVal])
+    }
     const tables = Sql.tables(db)
     if (tables.includes(collection)) {
-      setIndexes(db, collection, meta.index)
+      setIndexes(db, collection, fields)
     }
+  }
+  if (meta.search !== undefined) {
+    ensureMetaTable(db)
+    if (meta.search === 'drop' || meta.search === null || (Array.isArray(meta.search) && meta.search.length === 0)) {
+      dropFts(db, collection)
+      const existing = Sql.get(db, `SELECT * FROM _meta WHERE collection = ?`, [collection])
+      if (existing) {
+        Sql.run(db, `UPDATE _meta SET search_fields = ? WHERE collection = ?`, ['', collection])
+      } else {
+        Sql.run(db, `INSERT INTO _meta (collection, key_fields, search_fields, index_fields) VALUES (?, ?, ?, ?)`, [collection, '', '', ''])
+      }
+    } else {
+      const fields = Array.isArray(meta.search) ? meta.search : [meta.search]
+      const searchVal = fields.join(',')
+      const existing = Sql.get(db, `SELECT * FROM _meta WHERE collection = ?`, [collection])
+      if (existing) {
+        Sql.run(db, `UPDATE _meta SET search_fields = ? WHERE collection = ?`, [searchVal, collection])
+      } else {
+        Sql.run(db, `INSERT INTO _meta (collection, key_fields, search_fields, index_fields) VALUES (?, ?, ?, ?)`, [collection, '', searchVal, ''])
+      }
+      if (tableExists(db, collection) && fields.length) {
+        Query.ensureFts(db, collection, fields)
+      }
+    }
+  }
+  if (meta.fts === 'drop') {
+    dropFts(db, collection)
+  } else if (meta.fts === 'rebuild') {
+    rebuildFts(db, collection)
   }
   if (meta.key) {
     // Key can only be set before data exists or by recreating the table
@@ -48,13 +99,15 @@ export function setMeta(db, collection, meta) {
     if (existing) {
       Sql.run(db, `UPDATE _meta SET key_fields = ? WHERE collection = ?`, [keyVal, collection])
     } else {
-      Sql.run(db, `INSERT INTO _meta (collection, key_fields) VALUES (?, ?)`, [collection, keyVal])
+      Sql.run(db, `INSERT INTO _meta (collection, key_fields, search_fields, index_fields) VALUES (?, ?, ?, ?)`, [collection, keyVal, '', ''])
     }
   }
 }
 
 function ensureMetaTable(db) {
-  Sql.run(db, `CREATE TABLE IF NOT EXISTS _meta (collection TEXT PRIMARY KEY, key_fields TEXT)`)
+  Sql.run(db, `CREATE TABLE IF NOT EXISTS _meta (collection TEXT PRIMARY KEY, key_fields TEXT, search_fields TEXT, index_fields TEXT)`)
+  try { Sql.run(db, `ALTER TABLE _meta ADD COLUMN search_fields TEXT`) } catch { }
+  try { Sql.run(db, `ALTER TABLE _meta ADD COLUMN index_fields TEXT`) } catch { }
 }
 
 function getKeyFields(db, collection) {
@@ -96,6 +149,15 @@ export function ensureTable(db, collection, row) {
 
   const sql = `CREATE TABLE "${collection}" (${allCols.join(', ')}, PRIMARY KEY (${pkClause}))`
   Sql.run(db, sql)
+
+  const searchFields = getSearchFields(db, collection)
+  if (searchFields.length) {
+    Query.ensureFts(db, collection, searchFields)
+  }
+  const indexFields = getIndexFields(db, collection)
+  if (indexFields.length) {
+    setIndexes(db, collection, indexFields)
+  }
 }
 
 export function ensureColumns(db, collection, row) {
@@ -121,6 +183,7 @@ export function setIndexes(db, collection, indexedFields) {
 }
 
 export function dropCollection(db, collection) {
+  dropFts(db, collection)
   Sql.run(db, `DROP TABLE IF EXISTS "${collection}"`)
   // Clean up _meta entry
   const tables = Sql.tables(db)
@@ -144,12 +207,90 @@ export function tableExists(db, collection) {
 }
 
 export function isDbEmpty(db) {
-  const tables = Sql.tables(db).filter(n => n !== '_meta')
+  const tables = Sql.tables(db).filter(n => n !== '_meta' && !n.endsWith('_fts'))
   return tables.length === 0
 }
 
 export function jsonColumns(db, collection) {
   return Sql.columns(db, collection).filter(c => c.type === 'JSON').map(c => c.name)
+}
+
+export function getSearchFields(db, collection) {
+  const tables = Sql.tables(db)
+  if (tables.includes('_meta')) {
+    const row = Sql.get(db, `SELECT search_fields FROM _meta WHERE collection = ?`, [collection])
+    if (row && row.search_fields) {
+      return row.search_fields.split(',').map(s => s.trim()).filter(Boolean)
+    }
+  }
+  const fts = getFtsIndexes(db, collection)
+  if (fts.length) return fts[0]
+  return []
+}
+
+export function getIndexFields(db, collection) {
+  const tables = Sql.tables(db)
+  if (tables.includes('_meta')) {
+    const row = Sql.get(db, `SELECT index_fields FROM _meta WHERE collection = ?`, [collection])
+    if (row && row.index_fields) {
+      return row.index_fields.split(',').map(s => s.trim()).filter(Boolean)
+    }
+  }
+  return []
+}
+
+export function setCollectionConfig(db, config) {
+  if (!config || !config.id) throw new Error('Missing collection id')
+  const meta = {}
+  if (config.index) meta.index = config.index
+  if (config.search !== undefined) meta.search = config.search
+  if (config.key) meta.key = config.key
+  setMeta(db, config.id, meta)
+  return getMeta(db, config.id)
+}
+
+function isFtsTable(name) {
+  return /_fts($|_)/.test(name)
+}
+
+// --- FTS ---
+
+export function getFtsIndexes(db, collection) {
+  const prefix = collection + '_fts'
+  const rows = Sql.all(db, `SELECT name, sql FROM sqlite_master WHERE type='table' AND name LIKE ?`, [prefix + '%'])
+  const result = []
+  for (const row of rows) {
+    // Only match exact fts tables, not sub-tables like _fts_data
+    if (row.name !== prefix) continue
+    // Extract column names from CREATE VIRTUAL TABLE ... fts5(col1, col2, content=..., content_rowid=...)
+    const match = row.sql.match(/fts5\((.+)\)/)
+    if (match) {
+      const fields = match[1].split(',')
+        .map(s => s.trim().replace(/^"|"$/g, ''))
+        .filter(s => !s.startsWith('content'))
+      result.push(fields)
+    }
+  }
+  return result
+}
+
+export function dropFts(db, collection) {
+  const prefix = collection + '_fts'
+  // Drop triggers
+  for (const suffix of ['_ai', '_ad', '_au']) {
+    Sql.run(db, `DROP TRIGGER IF EXISTS "${prefix}${suffix}"`)
+  }
+  // Drop FTS table (and its shadow tables)
+  Sql.run(db, `DROP TABLE IF EXISTS "${prefix}"`)
+  Query.clearFtsCache(collection)
+}
+
+export function rebuildFts(db, collection) {
+  const prefix = collection + '_fts'
+  const exists = Sql.get(db, `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [prefix])
+  if (exists) {
+    Sql.run(db, `INSERT INTO "${prefix}"("${prefix}") VALUES('rebuild')`)
+  }
 }
 
 function inferType(value) {
