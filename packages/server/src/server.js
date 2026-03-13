@@ -21,7 +21,7 @@ const config = {
   cert: flag('cert', undefined),
   key: flag('key', undefined),
   token: flag('token', process.env.MY_SQLITE_TOKEN || null),
-  servers: flag('servers', null),
+  servers: flag('servers', process.env.MY_SQLITE_SERVERS || null),
 }
 
 Fs.ensureDir(config.datadir)
