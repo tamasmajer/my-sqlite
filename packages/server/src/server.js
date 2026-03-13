@@ -2,7 +2,7 @@
 import * as Http from './access/http.js'
 import * as Sql from './access/sqlite.js'
 import * as Fs from './access/fs.js'
-import { route } from './router.js'
+import * as Router from './router.js'
 
 const args = process.argv.slice(2)
 
@@ -58,7 +58,7 @@ if (!['api', 'ui', 'both'].includes(String(config.mode).toLowerCase())) {
   process.exit(1)
 }
 
-const server = Http.listen(config, (req, res) => route(req, res, config))
+const server = Http.listen(config, (req, res) => Router.route(req, res, config))
 Fs.writeFile(pidFile, String(process.pid))
 
 process.on('SIGINT', shutdown)
