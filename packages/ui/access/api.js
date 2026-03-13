@@ -6,7 +6,7 @@ async function request(path, opts = {}) {
   const token = getToken()
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const base = getServer()
+  const base = normalizeServerUrl(getServer())
   const url = base ? base + path : path
 
   const res = await fetch(url, { ...opts, headers })
@@ -25,7 +25,7 @@ export function getServer() {
 }
 
 export function setServer(url) {
-  Browser.storageSet('my_sqlite_server', url)
+  Browser.storageSet('my_sqlite_server', normalizeServerUrl(url))
 }
 
 export function getServers() {
@@ -34,16 +34,18 @@ export function getServers() {
 
 export function addServer(url, token) {
   const servers = getServers()
-  if (!servers.find(s => s.url === url)) {
-    servers.push({ url, token })
+  const norm = normalizeServerUrl(url)
+  if (!servers.find(s => s.url === norm)) {
+    servers.push({ url: norm, token })
     Browser.storageSet('my_sqlite_servers', JSON.stringify(servers))
   }
 }
 
 export function removeServer(url) {
-  const servers = getServers().filter(s => s.url !== url)
+  const norm = normalizeServerUrl(url)
+  const servers = getServers().filter(s => s.url !== norm)
   Browser.storageSet('my_sqlite_servers', JSON.stringify(servers))
-  if (getServer() === url) setServer('')
+  if (getServer() === norm) setServer('')
 }
 
 // --- Token (per-server) ---
@@ -73,6 +75,15 @@ export function mergeServers(configServers) {
   for (const s of configServers) {
     addServer(s.url, s.token)
   }
+}
+
+function normalizeServerUrl(url) {
+  const raw = (url || '').trim()
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/+$/, '')
+  const isLocal = raw.includes('localhost') || raw.startsWith('127.0.0.1')
+  const proto = isLocal ? 'http://' : 'https://'
+  return (proto + raw).replace(/\/+$/, '')
 }
 
 export async function fetchDatabases() {
