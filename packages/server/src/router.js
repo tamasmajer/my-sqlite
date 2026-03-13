@@ -11,6 +11,7 @@ import * as Parse from './parse.js'
 export function route(req, res, config) {
   const url = new URL(req.url, `http://${req.headers.host}`)
   const path = url.pathname
+  const mode = (config.mode || 'both').toLowerCase()
 
   // CORS preflight — must respond before auth check
   if (req.method === 'OPTIONS' && req.headers['access-control-request-method']) {
@@ -19,6 +20,10 @@ export function route(req, res, config) {
   }
 
   if (path === '/api' || path.startsWith('/api/')) {
+    if (mode === 'ui') {
+      Http.respond(res, 404, {}, 'not found')
+      return
+    }
     if (!Auth.checkApiAuth(req, config.token)) {
       json(res, 401, { ok: 0, error: 'Unauthorized' })
       return
@@ -28,6 +33,10 @@ export function route(req, res, config) {
   }
 
   if (path.startsWith('/admin')) {
+    if (mode === 'api') {
+      Http.respond(res, 404, {}, 'not found')
+      return
+    }
     handleAdmin(req, res, config, url)
     return
   }
@@ -186,7 +195,7 @@ function handleAdmin(req, res, config, url) {
 
   try {
     const data = Fs.readFile(filePath)
-    const mime = ext === 'js' ? 'text/javascript' : ext === 'css' ? 'text/css' : 'text/html'
+    const mime = ext === 'js' ? 'text/javascript' : ext === 'css' ? 'text/css' : ext === 'html' ? 'text/html' : 'application/octet-stream'
     Http.respond(res, 200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' }, data)
   } catch (e) {
     Http.respond(res, 404, {}, 'not found')

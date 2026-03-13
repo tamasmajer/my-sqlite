@@ -1,30 +1,38 @@
 # my-sqlite
 
-A thin REST layer over SQLite. Store and query JSON documents in Mongo-like collections using REST operations — tables and columns are created automatically. Data is organised as databases and collections (`/api/:db/:collection`), with one SQLite file per database. Each document requires an `id` primary key; additional indexes can be added.
+A thin REST layer over SQLite. Store and query JSON documents in Mongo-like collections using REST operations — tables and columns are created automatically. Data is organised as databases and collections (`/api/:db/:collection`), with one SQLite file per database. Each document requires an `id` primary key; additional indexes and search fields can be added.
 
-| Method | Endpoint | Body / Params | Description |
-|--------|----------|---------------|-------------|
 | Method | Endpoint | Body / Params | Description |
 |--------|----------|---------------|-------------|
 | `GET` | `/api` | — | List databases |
-| `GET` | `/api/:db` | — | List collections in a database |
+| `GET` | `/api/:db` | — | List collections in a database (array of configs) |
+| `PUT` | `/api/:db` | `{ id, index, search, key }` | Upsert a collection config |
+| `DELETE` | `/api/:db?{id}` | — | Drop a collection |
 | `DELETE` | `/api/:db` | — | Drop database |
-| `PUT` | `/api/:db` | `{ coll: [docs], ... }` | Multi-collection upsert |
-| `POST` | `/api/:db` | `{ coll: [ops], ... }` | Mixed batch operations |
-| `GET` | `/api/:db/:coll` | `?{filter}` | Query documents |
+| `POST` | `/api/:db` | `text/plain` | Batch protocol (one command per line) |
+| `GET` | `/api/:db/:coll` | `?filter` | Query documents |
 | `PUT` | `/api/:db/:coll` | `{ id, ...fields }` | Upsert a document |
 | `PATCH` | `/api/:db/:coll` | `{ id, ...fields }` | Partial update |
-| `DELETE` | `/api/:db/:coll` | `?{ id }` / `?{}` / *(none)* | Delete matching / delete all docs / drop collection |
-| `OPTIONS` | `/api/:db/:coll` | `{ index: [...] }` / *(none)* | Set indexes / read schema |
+| `DELETE` | `/api/:db/:coll` | `?filter` / `?{}` / *(none)* | Delete matching / delete all docs / drop collection |
 
 ## Quick Start
 
-Start the server:
+Start the server (API + UI):
 ```bash
 npm install
-node packages/server/src/server.js --port 3000
+npm run dev
 ```
 *The Admin UI will be available at [http://localhost:3000/admin](http://localhost:3000/admin)*
+
+UI-only (no API):
+```bash
+npm run ui
+```
+
+API-only (no UI):
+```bash
+npm run api
+```
 
 ## How it works
 
@@ -93,7 +101,10 @@ const user = await Db.get(users, 'u1')  // tags is an array, prefs is an object
 // Define indexes for faster queries:
 await Db.options(users, { index: ['age', 'email'] })
 
-// Read the current auto-generated schema:
+// Define search fields for $search:
+await Db.options(users, { search: ['name', 'bio'] })
+
+// Read the current collection config:
 const schema = await Db.options(users)
 
 // Delete all records but keep the table and indexes:
@@ -107,29 +118,14 @@ await Db.del(users)
 
 Batch calls reduce network round-trips by sending multiple operations in a single request. All operations within a batch run in a single SQLite transaction.
 
-**Multi-collection upsert** — `PUT /api/:db`:
-```js
-const db = 'localhost:3000/api/mydb'
-await Db.put(db, {
-  users:  [{ id: 'u1', name: 'Alice' }, { id: 'u2', name: 'Bob' }],
-  orders: [{ id: 'o1', userId: 'u1', total: 50 }]
-})
-// → { ok: 1, users: { ok: 1 }, orders: { ok: 1 } }
-```
-
-**Mixed batch** — `POST /api/:db` — combine PUT, PATCH, and DELETE across collections:
-```js
-await Db.post(db, {
-  users: [
-    { PUT: [{ id: 'u3', name: 'Charlie' }] },
-    { PATCH: [{ id: 'u1', age: 31 }] },
-    { DELETE: { id: 'u2' } }
-  ],
-  orders: [
-    { PUT: [{ id: 'o2', userId: 'u3', total: 75 }] }
-  ]
-})
-// → { ok: 1, users: [{ ok: 1 }, { ok: 1 }, { ok: 1 }], orders: [{ ok: 1 }] }
+**Text batch** — `POST /api/:db` with `Content-Type: text/plain`:
+```text
+PUT /users {id:u1,name:Alice}
+PUT /users {id:u2,name:Bob}
+GET /users age$gte=25&$sort=-age
+PATCH /users {id:u1,age:31}
+DELETE /users id=u2
+GET /users $count=true
 ```
 
 ## Admin UI
@@ -146,8 +142,40 @@ curl -X PUT localhost:3000/api/mydb/users \
   -H 'Content-Type: application/json' \
   -d '{"id":"u1","name":"Alice","age":30}'
 
-# Query documents (GET with JSON in the query string)
-curl 'localhost:3000/api/mydb/users?{"age":{"$gte":25},"$sort":{"age":-1}}'
+# Query documents (URL-native)
+curl 'localhost:3000/api/mydb/users?age$gte=25&$sort=-age'
+```
+
+## Query Formats
+
+Queries accept strict JSON, lazy JSON, or URL-native syntax. See `QUERY_PROTOCOL.md` for the full spec and examples.
+
+## Service File (systemd)
+
+Example service (UI + API) with `.env`:
+```ini
+[Unit]
+Description=my-sqlite REST API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/extropia/projects/experiments/my-sqlite
+ExecStart=/usr/local/bin/node --env-file /extropia/projects/experiments/my-sqlite/.env packages/server/src/server.js --port 9443 --host 0.0.0.0 --tls on --cert cert.pem --key key.pem --mode both
+Restart=always
+RestartSec=5
+StandardOutput=append:/extropia/projects/experiments/my-sqlite/logs/systemd.log
+StandardError=append:/extropia/projects/experiments/my-sqlite/logs/systemd-error.log
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`.env` should contain:
+```
+MY_SQLITE_TOKEN=...
+MY_SQLITE_SERVERS=host:port#token,host2:port2#token
 ```
 
 ## Server Configuration
@@ -161,6 +189,8 @@ curl 'localhost:3000/api/mydb/users?{"age":{"$gte":25},"$sort":{"age":-1}}'
 | `--tls` | `off` | Enable TLS (`on` or `off`) |
 | `--cert` | | Path to TLS certificate |
 | `--key` | | Path to TLS key |
+| `--mode` | `both` | `api`, `ui`, or `both` |
+| `--env-file` | *(optional)* | Path to a `.env` file |
 
 ## Auth & Remote Access
 
