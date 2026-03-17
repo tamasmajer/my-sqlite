@@ -17,21 +17,30 @@ A thin REST layer over SQLite. Store and query JSON documents in Mongo-like coll
 
 ## Quick Start
 
-Start the server (API + UI):
 ```bash
+cd server
 npm install
-npm run dev
-```
-*The Admin UI will be available at [http://localhost:3000/admin](http://localhost:3000/admin)*
-
-UI-only (no API):
-```bash
-npm run ui
 ```
 
-API-only (no UI):
+Start the server (API + Admin UI):
 ```bash
-npm run api
+npm start
+```
+*Admin UI at [http://localhost:3111/admin](http://localhost:3111/admin), API at [http://localhost:3111/api](http://localhost:3111/api)*
+
+DB only (no UI):
+```bash
+npm run db-only
+```
+
+UI only (no local database — connects to remote servers):
+```bash
+npm run ui-only
+```
+
+Stop a running server:
+```bash
+npm run stop
 ```
 
 ## How it works
@@ -41,7 +50,7 @@ Every operation targets a collection URL, e.g. `/api/mydb/users`:
 ```js
 import * as Db from 'my-sqlite-client'
 
-const users = 'localhost:3000/api/mydb/users'
+const users = 'localhost:3111/api/mydb/users'
 
 // 1. Save a document (creates table & columns automatically)
 await Db.put(users, { id: 'u1', name: 'Alice', age: 30 })
@@ -130,7 +139,9 @@ GET /users $count=true
 
 ## Admin UI
 
-A built-in web UI is served at `/admin`. It lets you browse databases and collections, query and filter documents, insert/upsert data, manage indexes, and delete or drop collections — all without writing code. If a `--token` is set, the UI will prompt for it on first visit.
+A built-in web UI is served at `/admin`. It lets you browse databases and collections, query and filter documents, insert/upsert data, manage indexes, and delete or drop collections — all without writing code.
+
+When running `npm start` (db + ui together), the UI talks to the local database directly — no token needed. When running `npm run ui-only`, the UI connects to remote servers configured in the sidebar.
 
 ## Raw HTTP API
 
@@ -138,12 +149,12 @@ Each client method maps to a standard HTTP verb. Use `cURL` or any HTTP client d
 
 ```bash
 # Save a document (PUT)
-curl -X PUT localhost:3000/api/mydb/users \
+curl -X PUT localhost:3111/api/mydb/users \
   -H 'Content-Type: application/json' \
   -d '{"id":"u1","name":"Alice","age":30}'
 
 # Query documents (URL-native)
-curl 'localhost:3000/api/mydb/users?age$gte=25&$sort=-age'
+curl 'localhost:3111/api/mydb/users?age$gte=25&$sort=-age'
 ```
 
 ## Query Formats
@@ -152,7 +163,7 @@ Queries accept strict JSON, lazy JSON, or URL-native syntax. See `QUERY_PROTOCOL
 
 ## Service File (systemd)
 
-Example service (UI + API) with `.env`:
+Example service (DB only) with `.env`:
 ```ini
 [Unit]
 Description=my-sqlite REST API
@@ -161,12 +172,12 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/extropia/projects/experiments/my-sqlite
-ExecStart=/usr/local/bin/node --env-file /extropia/projects/experiments/my-sqlite/.env packages/server/src/server.js --port 9443 --host 0.0.0.0 --tls on --cert cert.pem --key key.pem --mode both
+WorkingDirectory=/path/to/my-sqlite/server
+ExecStart=/usr/local/bin/node api.js --port 9443 --host 0.0.0.0 --tls on --cert cert.pem --key key.pem
 Restart=always
 RestartSec=5
-StandardOutput=append:/extropia/projects/experiments/my-sqlite/logs/systemd.log
-StandardError=append:/extropia/projects/experiments/my-sqlite/logs/systemd-error.log
+StandardOutput=append:/path/to/my-sqlite/server/logs/systemd.log
+StandardError=append:/path/to/my-sqlite/server/logs/systemd-error.log
 
 [Install]
 WantedBy=multi-user.target
@@ -182,14 +193,13 @@ MY_SQLITE_SERVERS=host:port#token,host2:port2#token
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--port` | `3000` | Server listening port |
+| `--port` | `3111` | Server listening port |
 | `--host` | `localhost` | Bind address |
 | `--datadir` | `./data` | Directory to store SQLite `.db` files |
 | `--token` | `$MY_SQLITE_TOKEN` | Authentication token for the API |
 | `--tls` | `off` | Enable TLS (`on` or `off`) |
 | `--cert` | | Path to TLS certificate |
 | `--key` | | Path to TLS key |
-| `--mode` | `both` | `api`, `ui`, or `both` |
 | `--env-file` | *(optional)* | Path to a `.env` file |
 
 ## Auth & Remote Access
@@ -225,7 +235,7 @@ Replace `YOUR_SERVER_IP` with the actual IP. The `-addext` line is needed for br
 
 **Start with TLS:**
 ```bash
-node packages/server/src/server.js \
+node api.js \
   --port 9443 --host 0.0.0.0 --tls on \
   --cert cert.pem --key key.pem \
   --token $(openssl rand -hex 24)
@@ -269,44 +279,54 @@ Tested over HTTPS from a remote client against a minimal VPS:
 
 Zero errors across all tests. SQLite concurrency is safe because better-sqlite3 is synchronous and Node.js is single-threaded — writes are effectively serialized. The main bottleneck is network latency; batch calls are the best way to improve throughput.
 
-## Coding Conventions
-
-This project uses **static JS references** — no classes, no `this`, no method calls on objects. Every function call looks like `Module.function(data)`, so you can always tell where a function is defined just by reading the call site.
-
-```js
-import * as Schema from './schema.js'
-import * as Data from './data.js'
-
-// ✓ Static: Module.function() — you know exactly where to find these
-Schema.openDb(datadir, name)
-Data.upsert(db, coll, docs)
-
-// ✗ Not flat: obj.method() — which class? which prototype? which override?
-db.prepare(sql).run(params)
-```
-
-State is plain objects passed as arguments, not instances with methods. External dependencies (SQLite, fs, DOM) are wrapped in thin `access/*.js` facade modules so business logic never imports npm or Node directly.
-
-### Project structure
+## Project Structure
 
 ```
-packages/
-  server/          HTTP server + SQLite engine
-    src/
-      server.js      Entry point, CLI flags
-      router.js      HTTP routing, request dispatch
-      schema.js      DB/table lifecycle, indexes, metadata
-      data.js        CRUD operations (upsert, query, patch, remove)
-      query.js       MongoDB-style query → SQL compiler
-      auth.js        Token authentication
-      access/        Facades (sqlite, fs, http, crypto)
-  client/          JS client library
-    src/
-      client.js      get, put, patch, del, post, options
-      access/        Facades (fetch)
-  ui/              Admin web UI (SPA)
-    init.js          Entry point, event delegation
-    view.js          HTML rendering (pure functions)
-    router.js        Client-side URL state
-    access/          Facades (api, browser)
+my-sqlite/
+  client/                   JS client library
+    access/
+      client.js               get, put, patch, del, options, batch
+      fetch.js                wraps global fetch
+    package.json
+  server/                   HTTP server + SQLite engine
+    access/
+      service.js              generic server lifecycle
+      server.js               pre-wired: DB + Admin UI
+      api-server.js           pre-wired: DB only
+      ui-server.js            pre-wired: Admin UI only
+      db/
+        data.js               CRUD operations
+        query.js              filter → SQL compiler
+        schema.js             table lifecycle, indexes, FTS
+      http/
+        api.js                API route tree
+        admin.js              Admin UI route tree
+        auth.js               token authentication
+        parse.js              query parsing
+        helpers.js            shared HTTP helpers
+      env/
+        http.js               wraps node:http
+        sqlite.js             wraps better-sqlite3
+        fs.js                 wraps node:fs
+        crypto.js             wraps node:crypto
+        process.js            wraps process.*
+        config.js             reads CLI flags + .env
+    public/                 Admin web UI (SPA)
+      access/
+        api.js                server communication
+        views.js              HTML rendering
+        routes.js             client-side URL state
+        env/
+          browser.js          wraps DOM, localStorage
+      init.js                 entry script
+      index.html
+      style.css
+    server.js               entry: DB + Admin UI
+    api.js                  entry: DB only
+    ui.js                   entry: Admin UI only
+    stop.js                 entry: stop running server
+    data/                   SQLite databases
+    package.json
 ```
+
+Entry scripts are 2 lines — all logic lives in `access/`. Each entry point has its own import tree: `ui.js` never loads database code, `api.js` never loads UI code.
