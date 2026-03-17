@@ -1,6 +1,6 @@
 // Schema — database and table lifecycle, indexes, metadata
-import * as Sql from './access/sqlite.js'
-import * as Fs from './access/fs.js'
+import * as Sql from '../env/sqlite.js'
+import * as Fs from '../env/fs.js'
 import * as Query from './query.js'
 
 export function openDb(datadir, name) {

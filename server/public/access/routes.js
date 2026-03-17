@@ -1,5 +1,5 @@
 // Router — client-side URL state
-import * as Browser from './access/browser.js'
+import * as Browser from './env/browser.js'
 
 export function navigate(path) {
   Browser.pushState(path)

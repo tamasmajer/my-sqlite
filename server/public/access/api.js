@@ -1,5 +1,5 @@
 // Fetch facade — wraps fetch for server communication
-import * as Browser from './browser.js'
+import * as Browser from './env/browser.js'
 
 async function request(path, opts = {}) {
   const headers = { ...opts.headers }

@@ -8,9 +8,9 @@ function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export function renderSidebar(currentServer, servers, mode = 'both') {
+export function renderSidebar(currentServer, servers, localDb) {
   const items = [
-    ...(mode === 'ui' ? [] : [`<a href="#" class="server-item ${!currentServer ? 'active' : ''}" data-server="">This Server</a>`]),
+    ...(localDb ? [`<a href="#" class="server-item ${!currentServer ? 'active' : ''}" data-server="">This Server</a>`] : []),
     ...servers.map(s => {
       const label = s.url.replace(/^https?:\/\//, '')
       const certUrl = s.url.replace(/\/?$/, '/api')

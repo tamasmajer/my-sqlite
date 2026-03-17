@@ -1,6 +1,6 @@
 // Query — MongoDB-style JSON filter to SQL compiler
-import * as Sql from './access/sqlite.js'
-import * as Parse from './parse.js'
+import * as Sql from '../env/sqlite.js'
+import * as Parse from '../http/parse.js'
 
 // Parse JSON filter string into SQL components
 // Input: raw query string (JSON), e.g. '{"age":{"$gte":30},"$sort":{"age":-1},"$limit":10}'

@@ -36,7 +36,7 @@
 //   options(conn, meta) — set collection config (index, search, key)
 //   batch(conn, text)   — text batch protocol (POST text/plain to db endpoint)
 //
-import * as Fetch from './access/fetch.js'
+import * as Fetch from './fetch.js'
 
 const connectionCache = new Map()
 

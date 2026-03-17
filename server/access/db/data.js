@@ -1,5 +1,5 @@
 // Data — CRUD operations (upsert, query, patch, remove)
-import * as Sql from './access/sqlite.js'
+import * as Sql from '../env/sqlite.js'
 import * as Schema from './schema.js'
 import * as Query from './query.js'
 

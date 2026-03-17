@@ -1,5 +1,5 @@
 // Auth — token generation and request authentication
-import * as Crypto from './access/crypto.js'
+import * as Crypto from '../env/crypto.js'
 
 const sessions = new Map()
 

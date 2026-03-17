@@ -1,0 +1,16 @@
+{
+  "name": "my-sqlite-server",
+  "version": "0.1.0",
+  "static": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js --port 3111 --host 0.0.0.0",
+    "db-and-ui": "node server.js --port 3111 --host 0.0.0.0",
+    "db-only": "node api.js --port 3111 --host 0.0.0.0",
+    "ui-only": "node ui.js --port 3112 --host 0.0.0.0",
+    "stop": "node stop.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  }
+}

@@ -1,14 +1,14 @@
 // Entry point — wires facades, router, and views together
 import * as Api from './access/api.js'
-import * as Browser from './access/browser.js'
-import * as Router from './router.js'
-import * as View from './view.js'
+import * as Browser from './access/env/browser.js'
+import * as Routes from './access/routes.js'
+import * as Views from './access/views.js'
 
 let _config = {}
 
 function page(app, content) {
-  const sidebar = View.renderSidebar(Api.getServer(), Api.getServers(), _config.mode || 'both')
-  Browser.setHtml(app, View.layout(sidebar, content))
+  const sidebar = Views.renderSidebar(Api.getServer(), Api.getServers(), _config.localDb)
+  Browser.setHtml(app, Views.layout(sidebar, content))
 }
 
 // Cell value popover
@@ -36,32 +36,36 @@ Browser.onKeydown(e => { if (e.key === 'Escape') hidePopover() })
 
 async function render() {
   const app = Browser.getById('app')
-  const r = Router.parse()
+  const r = Routes.parse()
 
-  if (!Api.getToken()) {
-    page(app, View.renderLogin())
+  if (!_config.localDb && !Api.getServer() && !Api.getToken()) {
+    page(app, Views.renderLogin())
+    return
+  }
+  if (Api.getServer() && !Api.getToken()) {
+    page(app, Views.renderLogin())
     return
   }
 
   try {
     if (!r.db) {
       const dbs = await Api.fetchDatabases()
-      page(app, View.renderDatabases(dbs || []))
+      page(app, Views.renderDatabases(dbs || []))
     } else if (!r.collection) {
       const cols = await Api.fetchCollections(r.db)
-      page(app, View.renderCollections(r.db, cols))
+      page(app, Views.renderCollections(r.db, cols))
     } else {
       const [schema, rows, total] = await Promise.all([
         Api.fetchSchema(r.db, r.collection),
         Api.fetchQuery(r.db, r.collection, r.q, r.skip, r.limit),
         Api.fetchCount(r.db, r.collection, r.q),
       ])
-      page(app, View.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit, total.count))
+      page(app, Views.renderData(r.db, r.collection, rows, schema, r.q, r.skip, r.limit, total.count))
     }
   } catch (err) {
     if (err.message === 'Unauthorized') {
       Api.setToken('')
-      page(app, View.renderLogin('Unauthorized'))
+      page(app, Views.renderLogin('Unauthorized'))
     } else {
       page(app, `<div class="error-page"><h1>Error</h1><p>${err.message}</p><a href="/admin">← Back</a></div>`)
     }
@@ -91,7 +95,7 @@ Browser.onClick(e => {
       const server = Api.getServers().find(s => s.url === url)
       if (server && server.token) Api.setToken(server.token)
     }
-    Router.navigate('/admin')
+    Routes.navigate('/admin')
     return
   }
 
@@ -107,7 +111,7 @@ Browser.onClick(e => {
   const a = Browser.closest(e.target, 'a')
   if (a && a.href && a.href.startsWith(Browser.getOrigin() + '/admin')) {
     e.preventDefault()
-    Router.navigate(a.href)
+    Routes.navigate(a.href)
     return
   }
 
@@ -135,7 +139,7 @@ Browser.onClick(e => {
     const db = Browser.getAttr(e.target, 'data-db')
     const coll = Browser.getAttr(e.target, 'data-coll')
     if (confirm(`DROP collection ${coll}? This cannot be undone.`)) {
-      Api.deleteDocs(db, coll, '').then(() => Router.navigate(`/admin/${db}`)).catch(err => alert(err.message))
+      Api.deleteDocs(db, coll, '').then(() => Routes.navigate(`/admin/${db}`)).catch(err => alert(err.message))
     }
   }
 
@@ -143,7 +147,7 @@ Browser.onClick(e => {
   if (e.target.id === 'drop-db-btn') {
     const db = Browser.getAttr(e.target, 'data-db')
     if (confirm(`DROP database ${db}? All collections will be deleted.`)) {
-      Api.dropDatabase(db).then(() => Router.navigate('/admin')).catch(err => alert(err.message))
+      Api.dropDatabase(db).then(() => Routes.navigate('/admin')).catch(err => alert(err.message))
     }
   }
 })
@@ -160,23 +164,23 @@ Browser.onSubmit(async e => {
       Api.addServer(url, fd.token)
       Api.setServer(url)
       Api.setToken(fd.token)
-      Router.navigate('/admin')
+      Routes.navigate('/admin')
     }
   } else if (form.id === 'login-form') {
     Api.setToken(fd.token)
     render()
   } else if (form.id === 'create-db-form') {
-    Router.navigate('/admin/' + encodeURIComponent(fd.db))
+    Routes.navigate('/admin/' + encodeURIComponent(fd.db))
   } else if (form.id === 'filter-form') {
     const db = Browser.getAttr(form, 'data-db')
     const coll = Browser.getAttr(form, 'data-coll')
-    Router.navigate(`/admin/${db}/${coll}?q=${encodeURIComponent(fd.q)}&skip=0`)
+    Routes.navigate(`/admin/${db}/${coll}?q=${encodeURIComponent(fd.q)}&skip=0`)
   } else if (form.id === 'put-form') {
     const db = Browser.getAttr(form, 'data-db')
     try {
       const payload = JSON.parse(fd.payload || '[]')
       await Api.putDocs(db, fd.collection, payload)
-      Router.navigate(`/admin/${db}/${fd.collection}`)
+      Routes.navigate(`/admin/${db}/${fd.collection}`)
     } catch (err) {
       alert(err.message)
     }
